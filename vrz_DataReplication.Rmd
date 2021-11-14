@@ -1,0 +1,41 @@
+---
+title: 'Data Replication'
+author: "Victoria Zdanowicz"
+date: "12/10/2021"
+output: 
+  html_document:
+    toc: TRUE
+    toc_depth: 3
+    toc_float: TRUE
+---
+
+```{r - packages}
+library(curl)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(sciplot)
+library(car)
+library(lme4)
+library(glmmTMB)
+library(MuMIn)
+library(AICcmodavg)
+```
+
+
+
+```{r - load in data}
+z <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/rawdata_female_gregariousness.csv")
+rawdata <- read.csv(z, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+head(rawdata)
+```
+**Statistics and reproducibility.** 
+We used a series of General Linear Mixed Models (GLMMs) to test our predictions regarding species differences in patterns of female associations (for an overview of models see Tables 1 and 3). In the models, we used community ID instead of species as test variable as it allows us to assess whether or not the patterns were consistent across the two chimpanzee communities and thereby establish which results are species-specific and which are communityspecific, although we cannot rule out population-level differences, which are thought to occur at least in chimpanzees61. In all models, we used each half-day focal follow as a data point and summarized the different parameters over this halfday period. As group sizes might vary systematically over the course of the day, we controlled in these models for the time of the day (three levels: morning, afternoon, and morning + afternoon if the focal started in the middle of the morning when the apes were lost the day before) by including it as a fixed effect into the models. To avoid pseudo replication, we added focal ID as a random factor and included random slopes for the time of the day within focal ID.
+
+In the first two sets of models, we aimed at describing the overall patterns of species differences in female gregariousness without controlling for the potential mechanisms (i.e. without including food abundance or sexual signaling as a predictor in the analysis). This was done to first assess whether, numerically, Bompusa bonobo females are more gregariousness amongst females than Taï chimpanzee females.
+
+In the first model, we tested for community differences in the numbers of female party members (P1). We used GLMMs with the rounded average number of female party members across the recorded 30 min party scans during a given focal follow as the response (Poisson error distribution). We included the community ID as the tested predictor (Model 1).
+
+Stargazer package -> good tables, publication ready
+kable -> knit into HTML
+DT -> allows you to navigate table in RMarkdown
