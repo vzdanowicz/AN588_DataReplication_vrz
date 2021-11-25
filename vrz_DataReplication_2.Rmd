@@ -1,0 +1,86 @@
+---
+title: "Data Replication Analysis"
+author: "Victoria Zdanowicz"
+date: "11/24/2021"
+output: 
+  html_document:
+    toc: TRUE
+    toc_depth: 3
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Assignment Overview
+
+You do not need to replicate ALL of the analyses presented in the paper, but at minimum you must replicate at least 3 analyses, including at least one descriptive statistical analysis and one inferential statistical analysis. As part of this assignment, you must also replicate to the best of your abilities at least one figure.
+
+Stargazer package -> good tables, publication ready
+kable -> knit into HTML
+DT -> allows you to navigate table in RMarkdown
+
+```{r - packages}
+library(curl)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(sciplot)
+library(car)
+library(glmmTMB)
+library(DHARMa)
+library(emmeans)
+```
+
+First loaded in the data. The dataset on Dryad was saved as an Excel file so I exported each individual sheet into separate .csv files. I uploaded both of the .csv files into GitHub so that I could curl the data into R.
+
+The article contains a fairly detailed description of their statistical analyses in R. I used the help() function to learn more about the glmmTMB package and function used by these authors. 
+    glmmTMB = fit generalized linear mixed models using Template Model Builder (TMB), formula follows lme4 syntax
+  
+>formula,data = NULL,family = gaussian(),ziformula = ~0,dispformula = ~1,weights = NULL,offset = NULL,contrasts = NULL,na.action, se = TRUE,verbose = FALSE,doFit = TRUE,control = glmmTMBControl(),REML = FALSE,start = NULL,map = NULL,sparseX = NULL
+            
+            
+**glmmTMB families**
+
+nbinom2(link = "log")
+
+nbinom1(link = "log")
+
+compois(link = "log")
+
+truncated_compois(link = "log")
+
+genpois(link = "log")
+
+truncated_genpois(link = "log")
+
+truncated_poisson(link = "log")
+
+truncated_nbinom2(link = "log")
+
+truncated_nbinom1(link = "log")
+
+beta_family(link = "logit")
+
+betabinomial(link = "logit")
+
+tweedie(link = "log")
+
+ziGamma(link = "inverse")
+
+```{r - load in data}
+a <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_alone.csv")
+alone.data <- read.csv(a, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+b <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_behav.csv")
+behav.data <- read.csv(b, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+
+head(alone.data)
+head(behav.data)
+
+```
+
+
+> To test our three predictions (described above), we fitted generalized linear mixed models (GLMMs) to each response variable (response variables for each prediction described below) using the glmmTMB function in the glmmTMB package with a beta-binomial error structure. We initially fitted GLMMs using binomial error structures but found that all models were overdispersed. Overdispersion occurs when variance is higher than predicted by the model because the model lacks an adjustable dispersion parameter (e.g., as in binomial and Poisson models; Bolker et al. 2009; Zuur et al. 2009). Beta-binomial models include an adjustable dispersion parameter that allows the model to predict variance appropriately for binomial proportion data (Harrison 2015).
+
+
