@@ -17,6 +17,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 You do not need to replicate ALL of the analyses presented in the paper, but at minimum you must replicate at least 3 analyses, including at least one descriptive statistical analysis and one inferential statistical analysis. As part of this assignment, you must also replicate to the best of your abilities at least one figure.
 
+
+
 Stargazer package -> good tables, publication ready
 kable -> knit into HTML
 DT -> allows you to navigate table in RMarkdown
@@ -33,7 +35,14 @@ library(DHARMa)
 library(emmeans)
 ```
 
-First loaded in the data. The dataset on Dryad was saved as an Excel file so I exported each individual sheet into separate .csv files. I uploaded both of the .csv files into GitHub so that I could curl the data into R.
+I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees"  by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present about his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me!! I then decided to look back over the other articles I had been considering for the assignment and realized the Lee et al. (2021) paper titled, "Gregariousness, foraging effort, and affiliative interactions in lactating bonobos and chimpanzees" covered a somewhat similar topic as the Surbeck paper while including much more detailed descriptions of their analyses! 
+
+
+
+
+# My Process
+
+First loaded in the data. The dataset on Dryad was saved as an Excel file with 2 sheets: one with individual chimp/bonobo data on time spent 'feeding, traveling, social' and the other with individual time spent 'alone.' I exported each individual sheet into separate .csv files and uploaded them to GitHub so that I could `curl` the data into R. 
 
 The article contains a fairly detailed description of their statistical analyses in R. I used the help() function to learn more about the glmmTMB package and function used by these authors. 
     glmmTMB = fit generalized linear mixed models using Template Model Builder (TMB), formula follows lme4 syntax
@@ -71,16 +80,27 @@ ziGamma(link = "inverse")
 
 ```{r - load in data}
 a <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_alone.csv")
-alone.data <- read.csv(a, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+time_alone <- read.csv(a, header = TRUE, sep = ",", stringsAsFactors = FALSE)
 b <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_behav.csv")
-behav.data <- read.csv(b, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+feed_travel_social <- read.csv(b, header = TRUE, sep = ",", stringsAsFactors = FALSE)
 
-head(alone.data)
-head(behav.data)
+head(time_alone)
+head(feed_travel_social)
 
 ```
 
 
+Exploring & visualizing the datasets..
+```{r - explore}
+par(mfrow = c(1,2))
+boxplot(data = time_alone, alone_scans ~ age_bin * species, group = time_alone$age_bin)
+boxplot(data = feed_travel_social, feeding_scans ~ age_bin * species, col = c('cadetblue1','darkseagreen1'))
+```
+
 > To test our three predictions (described above), we fitted generalized linear mixed models (GLMMs) to each response variable (response variables for each prediction described below) using the glmmTMB function in the glmmTMB package with a beta-binomial error structure. We initially fitted GLMMs using binomial error structures but found that all models were overdispersed. Overdispersion occurs when variance is higher than predicted by the model because the model lacks an adjustable dispersion parameter (e.g., as in binomial and Poisson models; Bolker et al. 2009; Zuur et al. 2009). Beta-binomial models include an adjustable dispersion parameter that allows the model to predict variance appropriately for binomial proportion data (Harrison 2015).
+
+They reported results of nonparametric dispersion tests for all models using the testDispersion function (case sensitive) in `DHARMa`. None of the beta-binomial models exhibited overdispersion.
+
+Model assumptions were evaluated by 'visually assessing QQ plots and the distribution of residuals plotted against fitted values using the `simulateResiduals` (case sensitive) function in `DHARMa`
 
 
