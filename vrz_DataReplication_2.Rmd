@@ -26,6 +26,7 @@ DT -> allows you to navigate table in RMarkdown
 ```{r - packages}
 library(curl)
 library(dplyr)
+library(broom)
 library(ggplot2)
 library(gridExtra)
 library(sciplot)
@@ -38,9 +39,11 @@ library(emmeans)
 I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees"  by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present about his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me!! I then decided to look back over the other articles I had been considering for the assignment and realized the Lee et al. (2021) paper titled, "Gregariousness, foraging effort, and affiliative interactions in lactating bonobos and chimpanzees" covered a somewhat similar topic as the Surbeck paper while including much more detailed descriptions of their analyses! 
 
 
+---
 
+## My Process
 
-# My Process
+---
 
 First loaded in the data. The dataset on Dryad was saved as an Excel file with 2 sheets: one with individual chimp/bonobo data on time spent 'feeding, traveling, social' and the other with individual time spent 'alone.' I exported each individual sheet into separate .csv files and uploaded them to GitHub so that I could `curl` the data into R. 
 
@@ -97,10 +100,327 @@ boxplot(data = time_alone, alone_scans ~ age_bin * species, group = time_alone$a
 boxplot(data = feed_travel_social, feeding_scans ~ age_bin * species, col = c('cadetblue1','darkseagreen1'))
 ```
 
+```{r levels}
+levels(time_alone$species)
+str(time_alone)
+```
+**do I need to convert species into factor?? in looking at data from m
+
+```{r char to fac}
+#convert column 'id' from character to factor
+time_alone$id <- as.factor(time_alone$id)
+time_alone$species <- as.factor(time_alone$species)
+time_alone$age_bin <- as.factor(time_alone$age_bin)
+str(time_alone)
+```
+
+
+
 > To test our three predictions (described above), we fitted generalized linear mixed models (GLMMs) to each response variable (response variables for each prediction described below) using the glmmTMB function in the glmmTMB package with a beta-binomial error structure. We initially fitted GLMMs using binomial error structures but found that all models were overdispersed. Overdispersion occurs when variance is higher than predicted by the model because the model lacks an adjustable dispersion parameter (e.g., as in binomial and Poisson models; Bolker et al. 2009; Zuur et al. 2009). Beta-binomial models include an adjustable dispersion parameter that allows the model to predict variance appropriately for binomial proportion data (Harrison 2015).
 
 They reported results of nonparametric dispersion tests for all models using the testDispersion function (case sensitive) in `DHARMa`. None of the beta-binomial models exhibited overdispersion.
 
 Model assumptions were evaluated by 'visually assessing QQ plots and the distribution of residuals plotted against fitted values using the `simulateResiduals` (case sensitive) function in `DHARMa`
 
+---
 
+## Prediction 1: Time Alone
+
+---
+
+
+>P1: Lactating female chimpanzees spend more time alone than lactating bonobos
+
+
+Lee et al. (2021) shares the response variable (prop_alone) was calculated by dividing # alone_scans of a given female by the total # of party scans collected on that female during that age class. Thankfully, the data is already organized by each species, female ID, and infant age class, so I only had to manipulate my dataframe `time_alone` to calculate the necessary response variable. 
+
+To do this - I created a new column in `time_alone` and then wrote a for loop that filled the appropriate proportion values into this new column
+
+```{r - newcol}
+time_alone$prop_alone <- NULL
+
+for (i in 1:nrow(time_alone)) {
+  time_alone$prop_alone[i] <- time_alone$alone_scans[i]/time_alone$total_scans[i]
+}
+
+```
+
+Now that I have my response variable, I can begin trying to work through the GLMM. I started this process by carefully reading through the article to understand the parameters used, as well as read the `{glmmTMB}` package information and ecological GLMM examples from our course supplementary readings. I also had to Google what exactly a *beta-binomial* model meant (as described in the source article).
+
+I first tested the interaction between species and infant age class (as outlined in the article). I first triede to create a `full` model that included the interaction and then a `reduced` model with both as independent fixed-effects and test the relationship with Anova.. like we had done in Mixed Effects module. But I kept getting the error message *Error in fixef(mod)[[component]] : invalid subscript type 'list'*
+
+I then realized `Anova()` function from `{car}` can actually directly test interactions within a single model. So I paired down to just have P1_interaction model and then tested the signifiance of the interaction using `Anova()` Wald "Chisq" with type "III".
+
+```{r model attempt1}
+
+#testing species/age interaction
+
+P1_interaction <- glmmTMB(prop_alone ~ as.factor(species) : as.factor(age_bin) + (1 | id), data = time_alone, family = betabinomial)
+Anova(P1_interaction, type = c("III"), test.statistic = "Chisq")
+
+```
+this includes individual effects ^^ but they only report interaction effects?
+
+model baseline bonobo 0-18
+
+
+```{r model1 coef}
+coef(P1_interaction)
+
+```
+
+can i run the model without creating new column?? this was much more successful... ALSO needed to add `weight = total_scans`... so weight with denominator of the proportion of the response variable
+
+```{r no propcol}
+P1_int <- glmmTMB(alone_scans/total_scans ~ species * age_bin + (1 | id), data = time_alone, family = betabinomial(link = "logit"), weight = total_scans)
+P1_anova_int <- Anova(P1_interaction, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r p1 int explore}
+summary(P1_int)
+print(P1_anova_int)
+```
+
+need to pull out the chisq x2, df, and p val for `species:age_bin` ... using `{broom}`
+
+```{r anova p1}
+P1_int_results <- tidy(P1_anova_int)
+P1_int_x2 <- P1_int_results$statistic[4]
+P1_int_df <- P1_int_results$df[4]
+P1_int_p <- P1_int_results$p.value[4]
+```
+
+Interaction was **not** significant so we need to model them as independent fixed effects
+
+```{r p1 independent}
+P1_ind <- glmmTMB(alone_scans/total_scans ~ species + age_bin + (1 | id), data = time_alone, family = betabinomial(link = "logit"), weight = total_scans)
+P1_anova_ind <- Anova(P1_ind, type = c("II"), test.statistic = "Chisq")
+```
+
+looking at model results to compare to article
+
+```{r p1 ind explore}
+summary(P1_ind)
+print(P1_anova_ind)
+```
+
+need to pull out the chisq x2, df, and p val for `species:age_bin` ... using `{broom}`
+
+```{r p1 ind vals}
+P1_ind_results <- tidy(P1_anova_ind)
+
+#pulling out values for species
+P1_SPECIES_x2 <- P1_ind_results$statistic[1]
+P1_SPECIES_df <- P1_ind_results$df[1]
+P1_SPECIES_p <- P1_ind_results$p.value[1]
+
+#pulling out values for age
+P1_AGE_x2 <- P1_ind_results$statistic[2]
+P1_AGE_df <- P1_ind_results$df[2]
+P1_AGE_p <- P1_ind_results$p.value[2]
+```
+
+
+not 100% sure how yet to pull out variables from the model or anova.. need to assess what I need to create the table (tables 3/4 in the paper)
+
+
+
+'We reported results of nonparametric dispersion
+tests for all models using the testDispersion function (case
+sensitive) in the DHARMa package. None of our beta-binomial
+models exhibited overdispersion. We evaluated model assumptions
+by visually assessing quantile–quantile plots and the distribution of
+residuals plotted against fitted values using the simulateResiduals
+(case sensitive) function in the DHARMa package.'
+
+'The nonparametric dispersion tests were not significant for
+either Time Alone model (interaction effect model: deviance ratio
+= 0.957, P = 0.960; independent effects model: deviance ratio =
+1.002, P = 0.928).'
+
+Next need to look at nonparametric dispersion tests using the `testDispersion()` function from `{DHARMa}`... first need to simulateResiduals
+
+```{r p1 sim}
+P1_int_sim <- simulateResiduals(fittedModel = P1_int)
+P1_int_disp <- testDispersion(P1_int_sim, alternative = "two.sided")
+```
+
+**NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
+Not getting exactly same value for deviance ratio... could have to do with how data was simulated?
+
+```{r p1 ind sim}
+P1_ind_sim <- simulateResiduals(fittedModel = P1_ind)
+P1_ind_disp <- testDispersion(P1_ind_sim, alternative = "two.sided")
+```
+
+Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)
+
+
+
+---
+
+## Prediction 2: Feeding & Travel
+
+---
+
+>Lactating females don't differ in feeding/travel time
+
+'We calculated our response variables by dividing the
+number of point samples that a given lactating female was engaged
+in feeding or travel, respectively, during each infant age class by
+the total number of good observations collected on that lactating
+female during that infant age class'
+
+### Feeding Model
+
+```{r feed}
+#convert column 'id' from character to factor
+feed_travel_social$id <- as.factor(feed_travel_social$id)
+feed_travel_social$species <- as.factor(feed_travel_social$species)
+feed_travel_social$age_bin <- as.factor(feed_travel_social$age_bin)
+str(feed_travel_social)
+```
+
+```{r feed int}
+P2_int_feed <- glmmTMB(feeding_scans/total_scans ~ species * age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
+P2_int_anova_feed <- Anova(P2_int_feed, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r feed int sum}
+summary(P2_int_feed)
+print(P2_int_anova_feed)
+```
+
+pull out vals
+```{r feed int vals}
+P2_intF_results <- tidy(P2_int_anova_feed)
+
+
+P2_intF_x2 <- P2_intF_results$statistic[4]
+P2_intF_df <- P2_intF_results$df[4]
+P2_intF_p <- P2_intF_results$p.value[4]
+```
+
+**now looking at species and age as independent fixed effects**
+
+```{r feed ind}
+P2_ind_feed <- glmmTMB(feeding_scans/total_scans ~ species + age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
+P2_ind_anova_feed <- Anova(P2_ind_feed, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r feed ind sum}
+summary(P2_ind_feed)
+print(P2_ind_anova_feed)
+```
+age has significant effect on feeding model ** (supported by article)
+
+pull out vals
+```{r feed ind vals}
+P2feed_indresults <- tidy(P2_ind_anova_feed)
+
+#pulling out values for species
+P2feed_indSP_x2 <- P2_indF_results$statistic[1]
+P2feed_indSP_df <- P2_indF_results$df[1]
+P2feed_indSP_p <- P2_indF_results$p.value[1]
+
+#pulling out values for age
+P2feed_indAGE_x2 <- P2_indF_results$statistic[2]
+P2feed_indAGE_df <- P2_indF_results$df[2]
+P2feed_indAGE_p <- P2_indF_results$p.value[2]
+```
+
+
+###Traveling Model
+
+Interact model first
+
+```{r travel int}
+P2travel_int <- glmmTMB(travel_scans/total_scans ~ species * age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
+P2travel_int_anova <- Anova(P2travel_int, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r travel int sum}
+summary(P2travel_int)
+print(P2travel_int_anova)
+```
+
+pull out vals
+```{r p2 travel vals}
+P2travel_int_results <- tidy(P2travel_int_anova)
+
+
+P2travel_int_x2 <- P2travel_int_results$statistic[4]
+P2travel_int_df <- P2travel_int_results$df[4]
+P2travel_int_p <- P2travel_int_results$p.value[4]
+```
+
+**now looking at species and age as independent fixed effects**
+
+```{r travel ind}
+P2travel_ind <- glmmTMB(travel_scans/total_scans ~ species + age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
+P2travel_ind_anova <- Anova(P2travel_ind, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r travel ind sum}
+summary(P2travel_ind)
+print(P2travel_ind_anova)
+```
+age has significant effect on feeding model ** (supported by article)
+
+pull out vals
+```{r travel ind vals}
+P2travel_indresults <- tidy(P2travel_ind_anova)
+
+#pulling out values for species
+P2travel_indSP_x2 <- P2travel_indresults$statistic[1]
+P2travel_indSP_df <- P2travel_indresults$df[1]
+P2travel_indSP_p <- P2travel_indresults$p.value[1]
+
+#pulling out values for age
+P2travel_indAGE_x2 <- P2travel_indresults$statistic[2]
+P2travel_indAGE_df <- P2travel_indresults$df[2]
+P2travel_indAGE_p <- P2travel_indresults$p.value[2]
+```
+
+---
+
+### Nonparametric Dispersion Tests
+
+---
+
+Next need to look at nonparametric dispersion tests using the `testDispersion()` function from `{DHARMa}`... first need to simulateResiduals
+
+#### Feeding
+
+```{r p2 feed sim}
+par(mfrow = c(1, 2))
+P2feed_INTsim <- simulateResiduals(fittedModel = P2_int_feed)
+P2feed_INTdisp <- testDispersion(P2feed_INTsim, alternative = "two.sided")
+P2feed_INDsim <- simulateResiduals(fittedModel = P2_ind_feed)
+P2feed_INDdisp <- testDispersion(P2feed_INDsim, alternative = "two.sided")
+```
+
+**NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
+Not getting exactly same value for deviance ratio... could have to do with how data was simulated?
+
+#### Traveling
+
+```{r p2 travel sim}
+par(mfrow = c(1, 2))
+P2travel_INTsim <- simulateResiduals(fittedModel = P2travel_int)
+P2travel_INTdisp <- testDispersion(P2travel_INTsim, alternative = "two.sided")
+P2travel_INDsim <- simulateResiduals(fittedModel = P2travel_ind)
+P2travel_INDdisp <- testDispersion(P2travel_INDsim, alternative = "two.sided")
+```
+
+Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)...
