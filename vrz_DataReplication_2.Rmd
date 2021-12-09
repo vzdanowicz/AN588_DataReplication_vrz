@@ -34,6 +34,8 @@ library(car)
 library(glmmTMB)
 library(DHARMa)
 library(emmeans)
+library(sjPlot)
+library(huxtable)
 ```
 
 I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees"  by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present about his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me!! I then decided to look back over the other articles I had been considering for the assignment and realized the Lee et al. (2021) paper titled, "Gregariousness, foraging effort, and affiliative interactions in lactating bonobos and chimpanzees" covered a somewhat similar topic as the Surbeck paper while including much more detailed descriptions of their analyses! 
@@ -41,79 +43,53 @@ I first selected an article titled, "Attractiveness of female sexual signaling p
 
 ---
 
-## My Process
+## Getting Started
 
 ---
 
 First loaded in the data. The dataset on Dryad was saved as an Excel file with 2 sheets: one with individual chimp/bonobo data on time spent 'feeding, traveling, social' and the other with individual time spent 'alone.' I exported each individual sheet into separate .csv files and uploaded them to GitHub so that I could `curl` the data into R. 
 
+
+```{r - load in data}
+#loading in 'alone' data
+
+a <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_alone.csv")
+time_alone <- read.csv(a, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+names(time_alone)<-c('species','ID','age','total','alone')
+
+#loading in 'feed/travel/social' data
+
+b <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_behav.csv")
+feed_travel_social <- read.csv(b, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+names(feed_travel_social)<-c('species','ID','age','total','feed','travel','social','social_adj')
+
+#view
+
+head(time_alone)
+head(feed_travel_social)
+```
+
 The article contains a fairly detailed description of their statistical analyses in R. I used the help() function to learn more about the glmmTMB package and function used by these authors. 
     glmmTMB = fit generalized linear mixed models using Template Model Builder (TMB), formula follows lme4 syntax
   
 >formula,data = NULL,family = gaussian(),ziformula = ~0,dispformula = ~1,weights = NULL,offset = NULL,contrasts = NULL,na.action, se = TRUE,verbose = FALSE,doFit = TRUE,control = glmmTMBControl(),REML = FALSE,start = NULL,map = NULL,sparseX = NULL
-            
-            
-**glmmTMB families**
-
-nbinom2(link = "log")
-
-nbinom1(link = "log")
-
-compois(link = "log")
-
-truncated_compois(link = "log")
-
-genpois(link = "log")
-
-truncated_genpois(link = "log")
-
-truncated_poisson(link = "log")
-
-truncated_nbinom2(link = "log")
-
-truncated_nbinom1(link = "log")
-
-beta_family(link = "logit")
-
-betabinomial(link = "logit")
-
-tweedie(link = "log")
-
-ziGamma(link = "inverse")
-
-```{r - load in data}
-a <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_alone.csv")
-time_alone <- read.csv(a, header = TRUE, sep = ",", stringsAsFactors = FALSE)
-b <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_behav.csv")
-feed_travel_social <- read.csv(b, header = TRUE, sep = ",", stringsAsFactors = FALSE)
-
-head(time_alone)
-head(feed_travel_social)
-
-```
-
 
 Exploring & visualizing the datasets..
 ```{r - explore}
 par(mfrow = c(1,2))
-boxplot(data = time_alone, alone_scans ~ age_bin * species, group = time_alone$age_bin)
-boxplot(data = feed_travel_social, feeding_scans ~ age_bin * species, col = c('cadetblue1','darkseagreen1'))
+boxplot(data = time_alone, alone ~ age * species, group = time_alone$age)
+boxplot(data = feed_travel_social, feed ~ age * species, col = c('cadetblue1','darkseagreen1'))
 ```
 
-```{r levels}
-levels(time_alone$species)
-str(time_alone)
-```
 **do I need to convert species into factor?? in looking at data from m
 
 ```{r char to fac}
 #convert column 'id' from character to factor
-time_alone$id <- as.factor(time_alone$id)
+time_alone$ID <- as.factor(time_alone$ID)
 time_alone$species <- as.factor(time_alone$species)
-time_alone$age_bin <- as.factor(time_alone$age_bin)
+time_alone$age <- as.factor(time_alone$age)
 str(time_alone)
 ```
-
 
 
 > To test our three predictions (described above), we fitted generalized linear mixed models (GLMMs) to each response variable (response variables for each prediction described below) using the glmmTMB function in the glmmTMB package with a beta-binomial error structure. We initially fitted GLMMs using binomial error structures but found that all models were overdispersed. Overdispersion occurs when variance is higher than predicted by the model because the model lacks an adjustable dispersion parameter (e.g., as in binomial and Poisson models; Bolker et al. 2009; Zuur et al. 2009). Beta-binomial models include an adjustable dispersion parameter that allows the model to predict variance appropriately for binomial proportion data (Harrison 2015).
@@ -121,6 +97,7 @@ str(time_alone)
 They reported results of nonparametric dispersion tests for all models using the testDispersion function (case sensitive) in `DHARMa`. None of the beta-binomial models exhibited overdispersion.
 
 Model assumptions were evaluated by 'visually assessing QQ plots and the distribution of residuals plotted against fitted values using the `simulateResiduals` (case sensitive) function in `DHARMa`
+
 
 ---
 
@@ -136,14 +113,11 @@ Lee et al. (2021) shares the response variable (prop_alone) was calculated by di
 
 To do this - I created a new column in `time_alone` and then wrote a for loop that filled the appropriate proportion values into this new column
 
-```{r - newcol}
-time_alone$prop_alone <- NULL
+`time_alone$prop_alone <- NULL
 
 for (i in 1:nrow(time_alone)) {
   time_alone$prop_alone[i] <- time_alone$alone_scans[i]/time_alone$total_scans[i]
-}
-
-```
+}`
 
 Now that I have my response variable, I can begin trying to work through the GLMM. I started this process by carefully reading through the article to understand the parameters used, as well as read the `{glmmTMB}` package information and ecological GLMM examples from our course supplementary readings. I also had to Google what exactly a *beta-binomial* model meant (as described in the source article).
 
@@ -151,81 +125,79 @@ I first tested the interaction between species and infant age class (as outlined
 
 I then realized `Anova()` function from `{car}` can actually directly test interactions within a single model. So I paired down to just have P1_interaction model and then tested the signifiance of the interaction using `Anova()` Wald "Chisq" with type "III".
 
-```{r model attempt1}
+### P1 - Interaction (M1)
 
 #testing species/age interaction
 
-P1_interaction <- glmmTMB(prop_alone ~ as.factor(species) : as.factor(age_bin) + (1 | id), data = time_alone, family = betabinomial)
-Anova(P1_interaction, type = c("III"), test.statistic = "Chisq")
+`P1_interaction <- glmmTMB(prop_alone ~ as.factor(species) : as.factor(age_bin) + (1 | id), data = time_alone, family = betabinomial)`
+`Anova(P1_interaction, type = c("III"), test.statistic = "Chisq")`
 
-```
 this includes individual effects ^^ but they only report interaction effects?
 
-model baseline bonobo 0-18
+model baseline bonobo 0-18. can i run the model without creating new column?? this was much more successful... ALSO needed to add `weight = total_scans`... so weight with denominator of the proportion of the response variable
 
+I could not figure out why my results did not look like those in the article... the values of the model above were close but didnt seem to be giving thee right output. I continued to read about the `glmmTMB` function and package to try and understand what piece I was missing. I eventually figured out that in order to have a proportion (non binary/Bernoulli) response variable in the model, it needs to be **weighted**. The `{glmmTMB}` package says: *"Binomial models with more than one trial (i.e., not binary/Bernoulli) can either be specified in the form prob ~...,weights = N, or in the more typical two-column matrix cbind(successes,failures)~... form"* (Magnusson et al. 2021).
 
-```{r model1 coef}
-coef(P1_interaction)
+I found an example of someone doing this in a question thread online. They kept the response variable as the proportion without creating an additional column in their data frame and used the denominator as the weight. After attempting that version of the model, my output was *finally* identical to Lee et al. (2021)!!
 
-```
-
-can i run the model without creating new column?? this was much more successful... ALSO needed to add `weight = total_scans`... so weight with denominator of the proportion of the response variable
-
-```{r no propcol}
-P1_int <- glmmTMB(alone_scans/total_scans ~ species * age_bin + (1 | id), data = time_alone, family = betabinomial(link = "logit"), weight = total_scans)
-P1_anova_int <- Anova(P1_interaction, type = c("III"), test.statistic = "Chisq")
+```{r P1M1}
+P1M1 <- glmmTMB(alone/total ~ species * age + (1 | ID), data = time_alone, family = betabinomial(link = "logit"), weight = total)
+P1M1_anova <- Anova(P1M1, type = c("III"), test.statistic = "Chisq")
 ```
 
 look at model/anova results and compare with paper
 
-```{r p1 int explore}
-summary(P1_int)
-print(P1_anova_int)
+```{r p1m1 explore}
+summary(P1M1)
+print(P1M1_anova)
 ```
 
-need to pull out the chisq x2, df, and p val for `species:age_bin` ... using `{broom}`
+need to pull out the chisq x2, df, and p val for `species:age_bin` ... using `{broom}` (from glm module)
 
-```{r anova p1}
-P1_int_results <- tidy(P1_anova_int)
-P1_int_x2 <- P1_int_results$statistic[4]
-P1_int_df <- P1_int_results$df[4]
-P1_int_p <- P1_int_results$p.value[4]
+```{r anova p1m1}
+P1M1_results <- tidy(P1M1_anova)
+P1M1_x2 <- P1M1_results$statistic[4]
+P1M1_df <- P1M1_results$df[4]
+P1M1_p <- P1M1_results$p.value[4]
 ```
 
-Interaction was **not** significant so we need to model them as independent fixed effects
 
-```{r p1 independent}
-P1_ind <- glmmTMB(alone_scans/total_scans ~ species + age_bin + (1 | id), data = time_alone, family = betabinomial(link = "logit"), weight = total_scans)
-P1_anova_ind <- Anova(P1_ind, type = c("II"), test.statistic = "Chisq")
+### P1 - Independent (M2)
+
+Interaction was **not** significant so we need to model them as independent fixed effects.. *now testing independent effects so use type II anova instead of 3*
+
+```{r P1M2}
+P1M2 <- glmmTMB(alone/total ~ species + age + (1 | ID), data = time_alone, family = betabinomial(link = "logit"), weight = total)
+P1M2_anova <- Anova(P1M2, type = c("II"), test.statistic = "Chisq")
 ```
 
 looking at model results to compare to article
 
-```{r p1 ind explore}
-summary(P1_ind)
-print(P1_anova_ind)
+```{r P1M2 explore}
+summary(P1M2)
+print(P1M2_anova)
 ```
 
 need to pull out the chisq x2, df, and p val for `species:age_bin` ... using `{broom}`
 
-```{r p1 ind vals}
-P1_ind_results <- tidy(P1_anova_ind)
+```{r P1M2 vals}
+P1M2_results <- tidy(P1M2_anova)
 
 #pulling out values for species
-P1_SPECIES_x2 <- P1_ind_results$statistic[1]
-P1_SPECIES_df <- P1_ind_results$df[1]
-P1_SPECIES_p <- P1_ind_results$p.value[1]
+P1M2_SPECIES_x2 <- P1M2_results$statistic[1]
+P1M2_SPECIES_df <- P1M2_results$df[1]
+P1M2_SPECIES_p <- P1M2_results$p.value[1]
 
 #pulling out values for age
-P1_AGE_x2 <- P1_ind_results$statistic[2]
-P1_AGE_df <- P1_ind_results$df[2]
-P1_AGE_p <- P1_ind_results$p.value[2]
+P1M2_AGE_x2 <- P1M2_results$statistic[2]
+P1M2_AGE_df <- P1M2_results$df[2]
+P1M2_AGE_p <- P1M2_results$p.value[2]
 ```
 
 
 not 100% sure how yet to pull out variables from the model or anova.. need to assess what I need to create the table (tables 3/4 in the paper)
 
-
+### P1 - Dispersion Tests
 
 'We reported results of nonparametric dispersion
 tests for all models using the testDispersion function (case
@@ -242,17 +214,22 @@ either Time Alone model (interaction effect model: deviance ratio
 
 Next need to look at nonparametric dispersion tests using the `testDispersion()` function from `{DHARMa}`... first need to simulateResiduals
 
-```{r p1 sim}
-P1_int_sim <- simulateResiduals(fittedModel = P1_int)
-P1_int_disp <- testDispersion(P1_int_sim, alternative = "two.sided")
+```{r P1M1 sim}
+par(mfrow = c(1, 2))
+P1M1_sim <- simulateResiduals(fittedModel = P1M1, plot = TRUE) #default is 250, authors may have increased because #s slightly  dif
+testDispersion(P1M1_sim)
 ```
 
 **NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
 Not getting exactly same value for deviance ratio... could have to do with how data was simulated?
 
-```{r p1 ind sim}
-P1_ind_sim <- simulateResiduals(fittedModel = P1_ind)
-P1_ind_disp <- testDispersion(P1_ind_sim, alternative = "two.sided")
+check out [this link](https://github.com/florianhartig/DHARMa/issues/158#issuecomment-616095939)
+
+
+```{r P1M2 sim}
+par(mfrow = c(1, 2))
+P1M2_sim <- simulateResiduals(fittedModel = P1M2, plot = TRUE) #default is 250, authors may have increased because #s slightly dif
+testDispersion(P1M2_sim)
 ```
 
 Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)
@@ -273,128 +250,137 @@ in feeding or travel, respectively, during each infant age class by
 the total number of good observations collected on that lactating
 female during that infant age class'
 
-### Feeding Model
+### Feeding Model (P2M1)
 
+
+
+first changed character values to factor since this is a diff file
 ```{r feed}
 #convert column 'id' from character to factor
-feed_travel_social$id <- as.factor(feed_travel_social$id)
+feed_travel_social$ID <- as.factor(feed_travel_social$ID)
 feed_travel_social$species <- as.factor(feed_travel_social$species)
-feed_travel_social$age_bin <- as.factor(feed_travel_social$age_bin)
+feed_travel_social$age <- as.factor(feed_travel_social$age)
 str(feed_travel_social)
 ```
 
-```{r feed int}
-P2_int_feed <- glmmTMB(feeding_scans/total_scans ~ species * age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
-P2_int_anova_feed <- Anova(P2_int_feed, type = c("III"), test.statistic = "Chisq")
+```{r feed int P2M1}
+P2M1 <- glmmTMB(feed/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M1_anova <- Anova(P2M1, type = c("III"), test.statistic = "Chisq")
 ```
 
 look at model/anova results and compare with paper
 
 ```{r feed int sum}
-summary(P2_int_feed)
-print(P2_int_anova_feed)
+summary(P2M1)
+print(P2M1_anova)
 ```
 
 pull out vals
 ```{r feed int vals}
-P2_intF_results <- tidy(P2_int_anova_feed)
+P2M1_results <- tidy(P2M1_anova)
 
 
-P2_intF_x2 <- P2_intF_results$statistic[4]
-P2_intF_df <- P2_intF_results$df[4]
-P2_intF_p <- P2_intF_results$p.value[4]
+P2M1_x2 <- P2M1_results$statistic[4]
+P2M1_df <- P2M1_results$df[4]
+P2M1_p <- P2M1_results$p.value[4]
 ```
+
+
+### Feeding Model (P2M2)
 
 **now looking at species and age as independent fixed effects**
 
-```{r feed ind}
-P2_ind_feed <- glmmTMB(feeding_scans/total_scans ~ species + age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
-P2_ind_anova_feed <- Anova(P2_ind_feed, type = c("II"), test.statistic = "Chisq")
+```{r feed p2m2}
+P2M2 <- glmmTMB(feed/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M2_anova <- Anova(P2M2, type = c("II"), test.statistic = "Chisq")
 ```
 
 look at model/anova results and compare with paper
 
-```{r feed ind sum}
-summary(P2_ind_feed)
-print(P2_ind_anova_feed)
+```{r p2m2 sum}
+summary(P2M2)
+print(P2M2_anova)
 ```
-age has significant effect on feeding model ** (supported by article)
+**age has significant effect on feeding model  (supported by article)**
 
 pull out vals
-```{r feed ind vals}
-P2feed_indresults <- tidy(P2_ind_anova_feed)
+```{r p2m2 vals}
+P2M2_results <- tidy(P2M2_anova)
 
 #pulling out values for species
-P2feed_indSP_x2 <- P2_indF_results$statistic[1]
-P2feed_indSP_df <- P2_indF_results$df[1]
-P2feed_indSP_p <- P2_indF_results$p.value[1]
+P2M2_SPECIES_x2 <- P2M2_results$statistic[1]
+P2M2_SPECIES_df <- P2M2_results$df[1]
+P2M2_SPECIES_p <- P2M2_results$p.value[1]
 
 #pulling out values for age
-P2feed_indAGE_x2 <- P2_indF_results$statistic[2]
-P2feed_indAGE_df <- P2_indF_results$df[2]
-P2feed_indAGE_p <- P2_indF_results$p.value[2]
+P2M2_AGE_x2 <- P2M2_results$statistic[2]
+P2M2_AGE_df <- P2M2_results$df[2]
+P2M2_AGE_p <- P2M2_results$p.value[2]
 ```
 
 
-###Traveling Model
+###Traveling Model (P2M3)
 
 Interact model first
 
-```{r travel int}
-P2travel_int <- glmmTMB(travel_scans/total_scans ~ species * age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
-P2travel_int_anova <- Anova(P2travel_int, type = c("III"), test.statistic = "Chisq")
+```{r p2m3}
+P2M3 <- glmmTMB(travel/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M3_anova <- Anova(P2M3, type = c("III"), test.statistic = "Chisq")
 ```
 
 look at model/anova results and compare with paper
 
-```{r travel int sum}
-summary(P2travel_int)
-print(P2travel_int_anova)
+```{r p2m3 sum}
+summary(P2M3)
+print(P2M3_anova)
 ```
 
 pull out vals
-```{r p2 travel vals}
-P2travel_int_results <- tidy(P2travel_int_anova)
+```{r p2m3 vals}
+P2M3_results <- tidy(P2M3_anova)
 
 
-P2travel_int_x2 <- P2travel_int_results$statistic[4]
-P2travel_int_df <- P2travel_int_results$df[4]
-P2travel_int_p <- P2travel_int_results$p.value[4]
+P2M3_x2 <- P2M3_results$statistic[4]
+P2M3_df <- P2M3_results$df[4]
+P2M3_p <- P2M3_results$p.value[4]
 ```
+
+
+###Traveling Model (P2M4)
 
 **now looking at species and age as independent fixed effects**
 
-```{r travel ind}
-P2travel_ind <- glmmTMB(travel_scans/total_scans ~ species + age_bin + (1 | id), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total_scans)
-P2travel_ind_anova <- Anova(P2travel_ind, type = c("II"), test.statistic = "Chisq")
+```{r travel p2m4}
+P2M4 <- glmmTMB(travel/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M4_anova <- Anova(P2M4, type = c("II"), test.statistic = "Chisq")
 ```
 
 look at model/anova results and compare with paper
 
 ```{r travel ind sum}
-summary(P2travel_ind)
-print(P2travel_ind_anova)
+summary(P2M4)
+print(P2M4_anova)
 ```
-age has significant effect on feeding model ** (supported by article)
+**age has significant effect on feeding model  (supported by article)**
 
 pull out vals
-```{r travel ind vals}
-P2travel_indresults <- tidy(P2travel_ind_anova)
+```{r p2m4 vals}
+P2M4_results <- tidy(P2M4_anova)
 
 #pulling out values for species
-P2travel_indSP_x2 <- P2travel_indresults$statistic[1]
-P2travel_indSP_df <- P2travel_indresults$df[1]
-P2travel_indSP_p <- P2travel_indresults$p.value[1]
+P2M4_SPECIES_x2 <- P2M4_results$statistic[1]
+P2M4_SPECIES_df <- P2M4_results$df[1]
+P2M4_SPECIES_p <- P2M4_results$p.value[1]
 
 #pulling out values for age
-P2travel_indAGE_x2 <- P2travel_indresults$statistic[2]
-P2travel_indAGE_df <- P2travel_indresults$df[2]
-P2travel_indAGE_p <- P2travel_indresults$p.value[2]
+P2M4_AGE_x2 <- P2M4_results$statistic[2]
+P2M4_AGE_df <- P2M4_results$df[2]
+P2M4_AGE_p <- P2M4_results$p.value[2]
 ```
 
 ---
 
-### Nonparametric Dispersion Tests
+### P2: Dispersion Tests
 
 ---
 
@@ -402,12 +388,13 @@ Next need to look at nonparametric dispersion tests using the `testDispersion()`
 
 #### Feeding
 
-```{r p2 feed sim}
-par(mfrow = c(1, 2))
-P2feed_INTsim <- simulateResiduals(fittedModel = P2_int_feed)
-P2feed_INTdisp <- testDispersion(P2feed_INTsim, alternative = "two.sided")
-P2feed_INDsim <- simulateResiduals(fittedModel = P2_ind_feed)
-P2feed_INDdisp <- testDispersion(P2feed_INDsim, alternative = "two.sided")
+```{r p2 disp}
+par(mfrow = c(2, 2))
+P2M1_sim <- simulateResiduals(fittedModel = P2M1, plot = TRUE) #feeding interaction
+testDispersion(P2M1_sim)
+P2M2_sim <- simulateResiduals(fittedModel = P2M2, plot = TRUE) #feeding independent
+testDispersion(P2M2_sim)
+
 ```
 
 **NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
@@ -417,10 +404,199 @@ Not getting exactly same value for deviance ratio... could have to do with how d
 
 ```{r p2 travel sim}
 par(mfrow = c(1, 2))
-P2travel_INTsim <- simulateResiduals(fittedModel = P2travel_int)
-P2travel_INTdisp <- testDispersion(P2travel_INTsim, alternative = "two.sided")
-P2travel_INDsim <- simulateResiduals(fittedModel = P2travel_ind)
-P2travel_INDdisp <- testDispersion(P2travel_INDsim, alternative = "two.sided")
+P2M3_sim <- simulateResiduals(fittedModel = P2M3, plot = TRUE) #travel interaction
+testDispersion(P2M3_sim)
+P2M4_sim <- simulateResiduals(fittedModel = P2M4, plot = TRUE) #travel independent
+testDispersion(P2M4_sim)
 ```
 
 Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)...
+
+
+---
+
+## Prediction 3: Social Behavior
+
+---
+
+>Lactating bonobos spend more time engaged in social interactions compared to chimpanzees
+
+'To test our third prediction that lactating bonobos spend more
+time engaged in social interactions, we ran two sets of models
+called Social Interactions and Adjusted Social Interactions. We
+calculated our response variable for social interactions by dividing
+the number of point samples that a given lactating female
+was engaged in social interactions during each infant age class by
+the total number of good observations collected on that lactating
+female during that infant age class. We calculated our response
+variable for adjusted social interactions by dividing the number
+of point samples that a given lactating female was engaged in
+social interactions with individuals other than her immature offspring
+during each infant age class by the total number of social
+interaction point samples collected on that lactating female
+during that infant age class.'
+
+### Social Interaction (P3M1)
+
+first test interaction of species and age when looking at social behav
+```{r P3M1}
+P3M1 <- glmmTMB(social/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M1_anova <- Anova(P3M1, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+```{r P3M1 sum}
+summary(P3M1)
+print(P3M1_anova)
+```
+
+pull out vals
+```{r P3M1 vals}
+P3M1_results <- tidy(P3M1_anova)
+
+
+P3M1_x2 <- P3M1_results$statistic[4]
+P3M1_df <- P3M1_results$df[4]
+P3M1_p <- P3M1_results$p.value[4]
+```
+
+
+### Social Independent (P3M2)
+
+**now looking at species and age as independent fixed effects**
+
+```{r P3M2}
+P3M2 <- glmmTMB(social/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M2_anova <- Anova(P3M2, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r P3M2 sum}
+summary(P3M2)
+print(P3M2_anova)
+```
+
+**neither age or species has significant effect on social (supported by article)**
+
+pull out vals
+```{r P3M2 vals}
+P3M2_results <- tidy(P3M2_anova)
+
+#pulling out values for species
+P3M2_SPECIES_x2 <- P3M2_results$statistic[1]
+P3M2_SPECIES_df <- P3M2_results$df[1]
+P3M2_SPECIES_p <- P3M2_results$p.value[1]
+
+#pulling out values for age
+P3M2_AGE_x2 <- P3M2_results$statistic[2]
+P3M2_AGE_df <- P3M2_results$df[2]
+P3M2_AGE_p <- P3M2_results$p.value[2]
+```
+
+### Social Adjusted Interaction (P3M3)
+
+first test interaction of species and age when looking at social behav
+```{r P3M3}
+P3M3 <- glmmTMB(social_adj/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M3_anova <- Anova(P3M3, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+```{r P3M3 sum}
+summary(P3M3)
+print(P3M3_anova)
+```
+
+pull out vals
+```{r P3M3 vals}
+P3M3_results <- tidy(P3M3_anova)
+
+
+P3M3_x2 <- P3M3_results$statistic[4]
+P3M3_df <- P3M3_results$df[4]
+P3M3_p <- P3M3_results$p.value[4]
+```
+
+
+### Social Adjusted Independent (P3M4)
+
+**now looking at species and age as independent fixed effects**
+
+```{r P3M4}
+P3M4 <- glmmTMB(social_adj/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M4_anova <- Anova(P3M4, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r P3M4 sum}
+summary(P3M4)
+print(P3M4_anova)
+```
+
+**species has significant effect on social_adjusted (supported by article)**
+
+pull out vals
+```{r P3M4 vals}
+P3M4_results <- tidy(P3M4_anova)
+
+#pulling out values for species
+P3M4_SPECIES_x2 <- P3M4_results$statistic[1]
+P3M4_SPECIES_df <- P3M4_results$df[1]
+P3M4_SPECIES_p <- P3M4_results$p.value[1]
+
+#pulling out values for age
+P3M4_AGE_x2 <- P3M4_results$statistic[2]
+P3M4_AGE_df <- P3M4_results$df[2]
+P3M4_AGE_p <- P3M4_results$p.value[2]
+```
+
+
+---
+
+### P3: Dispersion Tests
+
+---
+
+Next need to look at nonparametric dispersion tests using the `testDispersion()` function from `{DHARMa}`... first need to simulateResiduals
+
+#### Social (P3M1 and P3M2)
+
+```{r P3M1 P3M2 disp}
+par(mfrow = c(2, 2))
+P3M1_sim <- simulateResiduals(fittedModel = P3M1, plot = TRUE) #social interaction
+testDispersion(P3M1_sim)
+P3M2_sim <- simulateResiduals(fittedModel = P3M2, plot = TRUE) #social independent
+testDispersion(P3M2_sim)
+```
+
+**NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
+Not getting exactly same value for deviance ratio... could have to do with how data was simulated?
+
+#### Social Adjusted (P3M3 and P3M4)
+
+```{r P3M3 P3M4 disp}
+par(mfrow = c(1, 2))
+P3M3_sim <- simulateResiduals(fittedModel = P3M3, plot = TRUE) #travel interaction
+testDispersion(P3M3_sim)
+P3M4_sim <- simulateResiduals(fittedModel = P3M4, plot = TRUE) #travel independent
+testDispersion(P3M4_sim)
+```
+
+Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)...
+
+
+---
+
+## Tables and Figures?
+
+---
+
+
+
+
+check out huxtable... glmmTMB not supported by stargazer or kable..
+
+
+
