@@ -10,7 +10,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,knitr.table.format = 'markdown')
 ```
 
 # Assignment Overview
@@ -34,8 +34,9 @@ library(car)
 library(glmmTMB)
 library(DHARMa)
 library(emmeans)
-library(sjPlot)
-library(huxtable)
+library(broom.mixed)
+library(kableExtra)
+library(tibble)
 ```
 
 I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees"  by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present about his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me!! I then decided to look back over the other articles I had been considering for the assignment and realized the Lee et al. (2021) paper titled, "Gregariousness, foraging effort, and affiliative interactions in lactating bonobos and chimpanzees" covered a somewhat similar topic as the Surbeck paper while including much more detailed descriptions of their analyses! 
@@ -589,14 +590,158 @@ Also got the same P val for this dispersion test but different deviance ratio (a
 
 ---
 
-## Tables and Figures?
+## Tables and Figures
 
 ---
 
 
 
+Pulling glmmTMB model results into tibble then dataframe to manipulate into a table. I unfortunately couldn't just use `{stargazer}` or similiar packages because next-to-nothing is compatible with glmmTMB outputs... which is annoying!
 
-check out huxtable... glmmTMB not supported by stargazer or kable..
+```{r tidy}
+#time alone interaction
+P1M1_tidy <- tidy(P1M1)
+P1M1_df <- as.data.frame(P1M1_tidy)
 
+#time alone independent
+P1M2_tidy <- tidy(P1M2)
+P1M2_df <- as.data.frame(P1M2_tidy)
+
+#time feeding interaction
+P2M1_tidy <- tidy(P2M1)
+P2M1_df <- as.data.frame(P2M1_tidy)
+
+#time feeding independent
+P2M2_tidy <- tidy(P2M2)
+P2M2_df <- as.data.frame(P2M2_tidy)
+
+#time traveling interaction
+P2M3_tidy <- tidy(P2M3)
+P2M3_df <- as.data.frame(P2M3_tidy)
+
+#time traveling independent
+P2M4_tidy <- tidy(P2M4)
+P2M4_df <- as.data.frame(P2M4_tidy)
+
+#time social interaction
+P3M1_tidy <- tidy(P3M1)
+P3M1_df <- as.data.frame(P3M1_tidy)
+
+#time social independent
+P3M2_tidy <- tidy(P3M2)
+P3M2_df <- as.data.frame(P3M2_tidy)
+
+#time social adjusted interaction
+P3M3_tidy <- tidy(P3M3)
+P3M3_df <- as.data.frame(P3M3_tidy)
+
+#time social adjusted independent
+P3M4_tidy <- tidy(P3M4)
+P3M4_df <- as.data.frame(P3M4_tidy)
+
+```
+
+
+```{r table by hand}
+
+#Table 3 - GLMM parameter estimates for independent effects models
+
+alone_independent <- P1M2_df[c(1:4),c(4:8)]
+
+feed_independent <- P2M2_df[c(1:4),c(4:8)]
+
+travel_independent <- P2M4_df[c(1:4),c(4:8)]
+
+social_independent <- P3M2_df[c(1:4),c(4:8)]
+
+social_adj_independent <- P3M4_df[c(1:4),c(4:8)]
+
+
+#Table 4 - GLMM parameter estimates for interaction effect models
+
+alone_interaction <- P1M1_df[c(1,5,6),c(4:8)]
+
+feed_interaction <- P2M1_df[c(1,5,6),c(4:8)]
+
+travel_interaction <- P2M3_df[c(1,5,6),c(4:8)]
+
+social_interaction <- P3M1_df[c(1,5,6),c(4:8)]
+
+social_adj_interaction <- P3M3_df[c(1,5,6),c(4:8)]
+
+```
+
+
+change column names in data frames
+```{r for loop col names}
+
+alone_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+feed_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+travel_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+social_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+social_adj_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+
+```
+
+testing out cbind
+
+```{r indep table}
+Independent_Table <- rbind.data.frame(alone_independent,feed_independent,travel_independent,social_independent,social_adj_independent)
+
+
+Independent_Table <- Independent_Table %>% 
+          mutate_if(is.numeric, round, digits = 3)
+
+
+```
+
+spent way too long trying to figure out how to italicize z and P.. decided to just italicize the entire first row
+```{r kbl}
+
+#Table3
+
+kbl(Independent_Table, col.names = c("Model", "Estimate", "Standard error", "z", "P"), caption = "Table 3 - GLMM parameter estimates for independent effects models") %>%
+  kable_paper(html_font = "Cambria") %>%
+  pack_rows(index = c("Time Alone" = 4, "Feeding" = 4, "Travel" = 4, "Social interactions" = 4, "Adjusted social interactions" = 4))%>%
+  add_indent(1:20, level_of_indent = 10)%>%
+  row_spec(0, italic = T)
+  
+```
+
+```{r interaction labs}
+
+alone_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+feed_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+travel_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+social_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+social_adj_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+
+```
+
+interaction table prep
+```{r interaction table}
+Interaction_Table <- rbind.data.frame(alone_interaction,feed_interaction,travel_interaction,social_interaction,social_adj_interaction)
+
+
+Interaction_Table <- Interaction_Table %>% 
+          mutate_if(is.numeric, round, digits = 3)
+
+rownames(Interaction_Table) <- c(1:15)
+
+
+```
+
+spent way too long trying to figure out how to italicize z and P.. decided to just italicize the entire first row
+```{r interact kbl}
+#Table 4
+
+kbl(Interaction_Table, col.names = c("Model", "Estimate", "Standard error", "z", "P"), caption = "Table 4 - GLMM parameter estimates for interaction effects models") %>%
+  kable_paper(html_font = "Cambria") %>%
+  pack_rows(index = c("Time Alone" = 3, "Feeding" = 3, "Travel" = 3, "Social interactions" = 3, "Adjusted social interactions" = 3))%>%
+  add_indent(1:15, level_of_indent = 10)%>%
+  row_spec(0, italic = T)
+  
+  
+```
 
 
