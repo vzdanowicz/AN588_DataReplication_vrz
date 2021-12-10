@@ -1,0 +1,957 @@
+---
+title: "Data Replication Analysis"
+author: "Victoria Zdanowicz"
+date: "11/24/2021"
+output: 
+  html_document:
+    toc: TRUE
+    toc_depth: 3
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,knitr.table.format = 'markdown')
+```
+
+>Assignment Overview
+
+*You do not need to replicate ALL of the analyses presented in the paper, but at minimum you must replicate at least 3 analyses, including at least one descriptive statistical analysis and one inferential statistical analysis. As part of this assignment, you must also replicate to the best of your abilities at least one figure.*
+
+
+```{r - packages, messages = FALSE}
+library(curl)
+library(dplyr)
+library(broom)
+library(ggplot2)
+library(gridExtra)
+library(sciplot)
+library(car)
+library(glmmTMB)
+library(DHARMa)
+library(emmeans)
+library(broom.mixed)
+library(kableExtra)
+library(tibble)
+```
+
+
+
+---
+
+## Article Overview
+
+---
+
+
+*"Gregariousness, foraging effort, and affiliative interactions in lactating bonobos and chimpanzees"*
+2021 - Sean M. Lee, Gottfried Hohmann, Elizabeth V. Lonsdorf, Barbara Fruth,& Carson M. Murraya
+
+- [Article](https://academic.oup.com/beheco/article/32/1/188/6044822?login=true)
+- [Dryad](https://datadryad.org/stash/dataset/doi:10.5061/dryad.d51c5b01v)
+
+This study aimed to investigate the cost of fission-fusion social dynamics on lactating bonobos and chimpanzees given their well-established differences in gregariousness and feeding competition. Lactation is energetically expensive and often requires females to alter their energy expenditure and intake in order to maintain the necessary positive energy balance. The authors predicted that lactating chimpanzees offset the cost of lactation by being less gregarious and spending more time alone, thus mitigating potential costs of intense feeding competition. They also predicted that less gregariousness in lactating chimpanzees would constrain their social budget, resulting in less affiliative interactions overall. The study specifically looked at a community of chimpanzees from Gombe, Tanzania and the Bompusa West bonobo community at LuiKotale, Democratic Republic of the Congo. They collected party scans and detailed behavioral data during focal follows, standardizing data collection across both research sites for easier analysis. Data on lactating females was pooled into three age bins based on the age of their youngest dependent offspring (0 < 1.5, 1.5 < 3, and 3 < 4.5 years). These categories were included in *months* within their raw data. To test their predictions, generalized linear mixed models were fit using the package `{glmmTMB}` and nonparametric dispersion tests were run. 
+
+<br>
+
+In brief the three predictions tested in this study were:
+
+**1. Lactating chimpanzees spend more time alone with their immature offspring than do lactating bonobos**
+
+**2. Lactating females of the two species do not differ in feeding or travel time**
+
+**3. Lactating bonobos spend more time engage in social interactions, particularly with individuals other than their immature offspring.**
+
+<br>
+
+GLMM analysis revealed that in support of the first two predictions, lactating chimpanzees were less gregarious (spent more time alone) than lactating female bonobos. However, they also found lactating female chimpanzees and bonobos did *not* differ in their social interaction time, and that lactating chimpanzees actually spent proportionally *more* time affiliating with others. These results suggest that lactating chimpanzees do mitigate feeding competition by being less gregarious, but are still able to maintain their foraging budgets compared to bonobos. I found these results both interesting and surprising, especially because the authors did not provide any clear explanation for why bonobos are more gregarious yet, in this study, do not engage in as much social interactions when compared to lactating chimpanzees.
+
+---
+
+## Replication Overview
+
+---
+
+I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees" by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me. 
+
+I then decided to look back over the other articles I had considered earlier for the assignment. This article (Lee et al. 2021) covered a somewhat similar topic  while including much more detailed descriptions of their analyses! Though they explained their parameters/analyses fairly well, I still ran into some fun challenges because the authors fit GLMM using `{glmmTMB}`, which there is frustratingly little information on! Even after all the time I spent learning about glmms and reading about `glmmTMB`, I still don't quite understand why they used `glmmTMB` and not `glmer` or a more popular glmm function/package. It seems that `glmmTMB` is preferred when working with *zero-inflated* models but this analysis did not use such models? Regardless, once I figured out how to run the first GLMM using `glmmTMB`, the rest of the analyses were fairly easy. I ended up replicating the two main tables from the article (Tables 2, and Tables 3)
+
+<img src= "AN588_DataReplication_vrz/img/Fig1.png"/>
+
+---
+
+## Getting Started
+
+---
+
+First loaded in the data. The dataset on Dryad was saved as an Excel file with 2 sheets: one with individual chimp/bonobo data on time spent 'feeding, traveling, social' and the other with individual time spent 'alone.' I exported each individual sheet into separate .csv files and uploaded them to GitHub so that I could `curl` the data into R. 
+
+
+```{r - load in data}
+#loading in 'alone' data
+
+a <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_alone.csv")
+time_alone <- read.csv(a, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+names(time_alone)<-c('species','ID','age','total','alone')
+
+#loading in 'feed/travel/social' data
+
+b <- curl("https://raw.githubusercontent.com/vzdanowicz/AN588_DataReplication_vrz/main/lee_behav.csv")
+feed_travel_social <- read.csv(b, header = TRUE, sep = ",", stringsAsFactors = FALSE)
+names(feed_travel_social)<-c('species','ID','age','total','feed','travel','social','social_adj')
+
+#view
+
+head(time_alone)
+head(feed_travel_social)
+```
+
+The article contains a fairly detailed description of their statistical analyses in R. I used the help() function to learn more about the glmmTMB package and function used by these authors. 
+    glmmTMB = fit generalized linear mixed models using Template Model Builder (TMB), formula follows lme4 syntax
+  
+>formula,data = NULL,family = gaussian(),ziformula = ~0,dispformula = ~1,weights = NULL,offset = NULL,contrasts = NULL,na.action, se = TRUE,verbose = FALSE,doFit = TRUE,control = glmmTMBControl(),REML = FALSE,start = NULL,map = NULL,sparseX = NULL
+
+Exploring & visualizing the datasets..
+```{r - explore}
+par(mfrow = c(1,2))
+boxplot(data = time_alone, alone ~ age * species, group = time_alone$age)
+boxplot(data = feed_travel_social, feed ~ age * species, col = c('cadetblue1','darkseagreen1'))
+```
+
+**do I need to convert species into factor?? in looking at data from m
+
+```{r char to fac}
+#convert column 'id' from character to factor
+time_alone$ID <- as.factor(time_alone$ID)
+time_alone$species <- as.factor(time_alone$species)
+time_alone$age <- as.factor(time_alone$age)
+str(time_alone)
+```
+
+
+> To test our three predictions (described above), we fitted generalized linear mixed models (GLMMs) to each response variable (response variables for each prediction described below) using the glmmTMB function in the glmmTMB package with a beta-binomial error structure. We initially fitted GLMMs using binomial error structures but found that all models were overdispersed. Overdispersion occurs when variance is higher than predicted by the model because the model lacks an adjustable dispersion parameter (e.g., as in binomial and Poisson models; Bolker et al. 2009; Zuur et al. 2009). Beta-binomial models include an adjustable dispersion parameter that allows the model to predict variance appropriately for binomial proportion data (Harrison 2015).
+
+They reported results of nonparametric dispersion tests for all models using the testDispersion function (case sensitive) in `DHARMa`. None of the beta-binomial models exhibited overdispersion.
+
+Model assumptions were evaluated by 'visually assessing QQ plots and the distribution of residuals plotted against fitted values using the `simulateResiduals` (case sensitive) function in `DHARMa`
+
+
+---
+
+## Prediction 1: Time Alone
+
+---
+
+
+>P1: Lactating female chimpanzees spend more time alone than lactating bonobos
+
+
+Lee et al. (2021) shares the response variable (prop_alone) was calculated by dividing # alone_scans of a given female by the total # of party scans collected on that female during that age class. Thankfully, the data is already organized by each species, female ID, and infant age class, so I only had to manipulate my dataframe `time_alone` to calculate the necessary response variable. 
+
+To do this - I created a new column in `time_alone` and then wrote a for loop that filled the appropriate proportion values into this new column
+
+`time_alone$prop_alone <- NULL
+
+for (i in 1:nrow(time_alone)) {
+  time_alone$prop_alone[i] <- time_alone$alone_scans[i]/time_alone$total_scans[i]
+}`
+
+Now that I have my response variable, I can begin trying to work through the GLMM. I started this process by carefully reading through the article to understand the parameters used, as well as read the `{glmmTMB}` package information and ecological GLMM examples from our course supplementary readings. I also had to Google what exactly a *beta-binomial* model meant (as described in the source article).
+
+I first tested the interaction between species and infant age class (as outlined in the article). I first triede to create a `full` model that included the interaction and then a `reduced` model with both as independent fixed-effects and test the relationship with Anova.. like we had done in Mixed Effects module. But I kept getting the error message *Error in fixef(mod)[[component]] : invalid subscript type 'list'*
+
+I then realized `Anova()` function from `{car}` can actually directly test interactions within a single model. So I paired down to just have P1_interaction model and then tested the signifiance of the interaction using `Anova()` Wald "Chisq" with type "III".
+
+### P1 - Interaction (M1)
+
+#testing species/age interaction
+
+`P1_interaction <- glmmTMB(prop_alone ~ as.factor(species) : as.factor(age_bin) + (1 | id), data = time_alone, family = betabinomial)`
+`Anova(P1_interaction, type = c("III"), test.statistic = "Chisq")`
+
+this includes individual effects ^^ but they only report interaction effects?
+
+model baseline bonobo 0-18. can i run the model without creating new column?? this was much more successful... ALSO needed to add `weight = total_scans`... so weight with denominator of the proportion of the response variable
+
+I could not figure out why my results did not look like those in the article... the values of the model above were close but didnt seem to be giving thee right output. I continued to read about the `glmmTMB` function and package to try and understand what piece I was missing. I eventually figured out that in order to have a proportion (non binary/Bernoulli) response variable in the model, it needs to be **weighted**. The `{glmmTMB}` package says: *"Binomial models with more than one trial (i.e., not binary/Bernoulli) can either be specified in the form prob ~...,weights = N, or in the more typical two-column matrix cbind(successes,failures)~... form"* (Magnusson et al. 2021).
+
+I found an example of someone doing this in a question thread online. They kept the response variable as the proportion without creating an additional column in their data frame and used the denominator as the weight. After attempting that version of the model, my output was *finally* identical to Lee et al. (2021)!!
+
+```{r P1M1}
+P1M1 <- glmmTMB(alone/total ~ species * age + (1 | ID), data = time_alone, family = betabinomial(link = "logit"), weight = total)
+P1M1_anova <- Anova(P1M1, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r p1m1 explore}
+summary(P1M1)
+print(P1M1_anova)
+```
+
+need to pull out the chisq x2, df, and p val for `species:age_bin` ... using `{broom}` (from glm module)
+
+```{r anova p1m1}
+P1M1_results <- tidy(P1M1_anova)
+P1M1_x2 <- P1M1_results$statistic[4]
+P1M1_df <- P1M1_results$df[4]
+P1M1_p <- P1M1_results$p.value[4]
+```
+
+
+### P1 - Independent (M2)
+
+Interaction was **not** significant so we need to model them as independent fixed effects.. *now testing independent effects so use type II anova instead of 3*
+
+```{r P1M2}
+P1M2 <- glmmTMB(alone/total ~ species + age + (1 | ID), data = time_alone, family = betabinomial(link = "logit"), weight = total)
+P1M2_anova <- Anova(P1M2, type = c("II"), test.statistic = "Chisq")
+```
+
+looking at model results to compare to article
+
+```{r P1M2 explore}
+summary(P1M2)
+print(P1M2_anova)
+```
+
+need to pull out the chisq x2, df, and p val for `species:age_bin` ... using `{broom}`
+
+```{r P1M2 vals}
+P1M2_results <- tidy(P1M2_anova)
+
+#pulling out values for species
+P1M2_SPECIES_x2 <- P1M2_results$statistic[1]
+P1M2_SPECIES_df <- P1M2_results$df[1]
+P1M2_SPECIES_p <- P1M2_results$p.value[1]
+
+#pulling out values for age
+P1M2_AGE_x2 <- P1M2_results$statistic[2]
+P1M2_AGE_df <- P1M2_results$df[2]
+P1M2_AGE_p <- P1M2_results$p.value[2]
+```
+
+
+not 100% sure how yet to pull out variables from the model or anova.. need to assess what I need to create the table (tables 3/4 in the paper)
+
+### P1 - Dispersion Tests
+
+'We reported results of nonparametric dispersion
+tests for all models using the testDispersion function (case
+sensitive) in the DHARMa package. None of our beta-binomial
+models exhibited overdispersion. We evaluated model assumptions
+by visually assessing quantile–quantile plots and the distribution of
+residuals plotted against fitted values using the simulateResiduals
+(case sensitive) function in the DHARMa package.'
+
+'The nonparametric dispersion tests were not significant for
+either Time Alone model (interaction effect model: deviance ratio
+= 0.957, P = 0.960; independent effects model: deviance ratio =
+1.002, P = 0.928).'
+
+Next need to look at nonparametric dispersion tests using the `testDispersion()` function from `{DHARMa}`... first need to simulateResiduals
+
+```{r P1M1 sim}
+par(mfrow = c(1, 2))
+P1M1_sim <- simulateResiduals(fittedModel = P1M1, plot = TRUE) #default is 250, authors may have increased because #s slightly  dif
+testDispersion(P1M1_sim)
+```
+
+**NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
+Not getting exactly same value for deviance ratio... could have to do with how data was simulated?
+
+check out [this link](https://github.com/florianhartig/DHARMa/issues/158#issuecomment-616095939)
+
+
+```{r P1M2 sim}
+par(mfrow = c(1, 2))
+P1M2_sim <- simulateResiduals(fittedModel = P1M2, plot = TRUE) #default is 250, authors may have increased because #s slightly dif
+testDispersion(P1M2_sim)
+```
+
+Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)
+
+
+
+---
+
+## Prediction 2: Feeding & Travel
+
+---
+
+>Lactating females don't differ in feeding/travel time
+
+'We calculated our response variables by dividing the
+number of point samples that a given lactating female was engaged
+in feeding or travel, respectively, during each infant age class by
+the total number of good observations collected on that lactating
+female during that infant age class'
+
+### Feeding Model (P2M1)
+
+
+
+first changed character values to factor since this is a diff file
+```{r feed}
+#convert column 'id' from character to factor
+feed_travel_social$ID <- as.factor(feed_travel_social$ID)
+feed_travel_social$species <- as.factor(feed_travel_social$species)
+feed_travel_social$age <- as.factor(feed_travel_social$age)
+str(feed_travel_social)
+```
+
+```{r feed int P2M1}
+P2M1 <- glmmTMB(feed/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M1_anova <- Anova(P2M1, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r feed int sum}
+summary(P2M1)
+print(P2M1_anova)
+```
+
+pull out vals
+```{r feed int vals}
+P2M1_results <- tidy(P2M1_anova)
+
+
+P2M1_x2 <- P2M1_results$statistic[4]
+P2M1_df <- P2M1_results$df[4]
+P2M1_p <- P2M1_results$p.value[4]
+```
+
+
+### Feeding Model (P2M2)
+
+**now looking at species and age as independent fixed effects**
+
+```{r feed p2m2}
+P2M2 <- glmmTMB(feed/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M2_anova <- Anova(P2M2, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r p2m2 sum}
+summary(P2M2)
+print(P2M2_anova)
+```
+**age has significant effect on feeding model  (supported by article)**
+
+pull out vals
+```{r p2m2 vals}
+P2M2_results <- tidy(P2M2_anova)
+
+#pulling out values for species
+P2M2_SPECIES_x2 <- P2M2_results$statistic[1]
+P2M2_SPECIES_df <- P2M2_results$df[1]
+P2M2_SPECIES_p <- P2M2_results$p.value[1]
+
+#pulling out values for age
+P2M2_AGE_x2 <- P2M2_results$statistic[2]
+P2M2_AGE_df <- P2M2_results$df[2]
+P2M2_AGE_p <- P2M2_results$p.value[2]
+```
+
+
+###Traveling Model (P2M3)
+
+Interact model first
+
+```{r p2m3}
+P2M3 <- glmmTMB(travel/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M3_anova <- Anova(P2M3, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r p2m3 sum}
+summary(P2M3)
+print(P2M3_anova)
+```
+
+pull out vals
+```{r p2m3 vals}
+P2M3_results <- tidy(P2M3_anova)
+
+
+P2M3_x2 <- P2M3_results$statistic[4]
+P2M3_df <- P2M3_results$df[4]
+P2M3_p <- P2M3_results$p.value[4]
+```
+
+
+###Traveling Model (P2M4)
+
+**now looking at species and age as independent fixed effects**
+
+```{r travel p2m4}
+P2M4 <- glmmTMB(travel/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P2M4_anova <- Anova(P2M4, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r travel ind sum}
+summary(P2M4)
+print(P2M4_anova)
+```
+**age has significant effect on feeding model  (supported by article)**
+
+pull out vals
+```{r p2m4 vals}
+P2M4_results <- tidy(P2M4_anova)
+
+#pulling out values for species
+P2M4_SPECIES_x2 <- P2M4_results$statistic[1]
+P2M4_SPECIES_df <- P2M4_results$df[1]
+P2M4_SPECIES_p <- P2M4_results$p.value[1]
+
+#pulling out values for age
+P2M4_AGE_x2 <- P2M4_results$statistic[2]
+P2M4_AGE_df <- P2M4_results$df[2]
+P2M4_AGE_p <- P2M4_results$p.value[2]
+```
+
+---
+
+### P2: Dispersion Tests
+
+---
+
+Next need to look at nonparametric dispersion tests using the `testDispersion()` function from `{DHARMa}`... first need to simulateResiduals
+
+#### Feeding
+
+```{r p2 disp}
+par(mfrow = c(2, 2))
+P2M1_sim <- simulateResiduals(fittedModel = P2M1, plot = TRUE) #feeding interaction
+testDispersion(P2M1_sim)
+P2M2_sim <- simulateResiduals(fittedModel = P2M2, plot = TRUE) #feeding independent
+testDispersion(P2M2_sim)
+
+```
+
+**NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
+Not getting exactly same value for deviance ratio... could have to do with how data was simulated?
+
+#### Traveling
+
+```{r p2 travel sim}
+par(mfrow = c(1, 2))
+P2M3_sim <- simulateResiduals(fittedModel = P2M3, plot = TRUE) #travel interaction
+testDispersion(P2M3_sim)
+P2M4_sim <- simulateResiduals(fittedModel = P2M4, plot = TRUE) #travel independent
+testDispersion(P2M4_sim)
+```
+
+Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)...
+
+
+---
+
+## Prediction 3: Social Behavior
+
+---
+
+>Lactating bonobos spend more time engaged in social interactions compared to chimpanzees
+
+'To test our third prediction that lactating bonobos spend more
+time engaged in social interactions, we ran two sets of models
+called Social Interactions and Adjusted Social Interactions. We
+calculated our response variable for social interactions by dividing
+the number of point samples that a given lactating female
+was engaged in social interactions during each infant age class by
+the total number of good observations collected on that lactating
+female during that infant age class. We calculated our response
+variable for adjusted social interactions by dividing the number
+of point samples that a given lactating female was engaged in
+social interactions with individuals other than her immature offspring
+during each infant age class by the total number of social
+interaction point samples collected on that lactating female
+during that infant age class.'
+
+### Social Interaction (P3M1)
+
+first test interaction of species and age when looking at social behav
+```{r P3M1}
+P3M1 <- glmmTMB(social/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M1_anova <- Anova(P3M1, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+```{r P3M1 sum}
+summary(P3M1)
+print(P3M1_anova)
+```
+
+pull out vals
+```{r P3M1 vals}
+P3M1_results <- tidy(P3M1_anova)
+
+
+P3M1_x2 <- P3M1_results$statistic[4]
+P3M1_df <- P3M1_results$df[4]
+P3M1_p <- P3M1_results$p.value[4]
+```
+
+
+### Social Independent (P3M2)
+
+**now looking at species and age as independent fixed effects**
+
+```{r P3M2}
+P3M2 <- glmmTMB(social/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M2_anova <- Anova(P3M2, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r P3M2 sum}
+summary(P3M2)
+print(P3M2_anova)
+```
+
+**neither age or species has significant effect on social (supported by article)**
+
+pull out vals
+```{r P3M2 vals}
+P3M2_results <- tidy(P3M2_anova)
+
+#pulling out values for species
+P3M2_SPECIES_x2 <- P3M2_results$statistic[1]
+P3M2_SPECIES_df <- P3M2_results$df[1]
+P3M2_SPECIES_p <- P3M2_results$p.value[1]
+
+#pulling out values for age
+P3M2_AGE_x2 <- P3M2_results$statistic[2]
+P3M2_AGE_df <- P3M2_results$df[2]
+P3M2_AGE_p <- P3M2_results$p.value[2]
+```
+
+### Social Adjusted Interaction (P3M3)
+
+first test interaction of species and age when looking at social behav
+```{r P3M3}
+P3M3 <- glmmTMB(social_adj/total ~ species * age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M3_anova <- Anova(P3M3, type = c("III"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+```{r P3M3 sum}
+summary(P3M3)
+print(P3M3_anova)
+```
+
+pull out vals
+```{r P3M3 vals}
+P3M3_results <- tidy(P3M3_anova)
+
+
+P3M3_x2 <- P3M3_results$statistic[4]
+P3M3_df <- P3M3_results$df[4]
+P3M3_p <- P3M3_results$p.value[4]
+```
+
+
+### Social Adjusted Independent (P3M4)
+
+**now looking at species and age as independent fixed effects**
+
+```{r P3M4}
+P3M4 <- glmmTMB(social_adj/total ~ species + age + (1 | ID), data = feed_travel_social, family = betabinomial(link = "logit"), weight = total)
+P3M4_anova <- Anova(P3M4, type = c("II"), test.statistic = "Chisq")
+```
+
+look at model/anova results and compare with paper
+
+```{r P3M4 sum}
+summary(P3M4)
+print(P3M4_anova)
+```
+
+**species has significant effect on social_adjusted (supported by article)**
+
+pull out vals
+```{r P3M4 vals}
+P3M4_results <- tidy(P3M4_anova)
+
+#pulling out values for species
+P3M4_SPECIES_x2 <- P3M4_results$statistic[1]
+P3M4_SPECIES_df <- P3M4_results$df[1]
+P3M4_SPECIES_p <- P3M4_results$p.value[1]
+
+#pulling out values for age
+P3M4_AGE_x2 <- P3M4_results$statistic[2]
+P3M4_AGE_df <- P3M4_results$df[2]
+P3M4_AGE_p <- P3M4_results$p.value[2]
+```
+
+
+---
+
+### P3: Dispersion Tests
+
+---
+
+Next need to look at nonparametric dispersion tests using the `testDispersion()` function from `{DHARMa}`... first need to simulateResiduals
+
+#### Social (P3M1 and P3M2)
+
+```{r P3M1 P3M2 disp}
+par(mfrow = c(2, 2))
+P3M1_sim <- simulateResiduals(fittedModel = P3M1, plot = TRUE) #social interaction
+testDispersion(P3M1_sim)
+P3M2_sim <- simulateResiduals(fittedModel = P3M2, plot = TRUE) #social independent
+testDispersion(P3M2_sim)
+```
+
+**NEED TO PULL OUT PVAL AND DEVIANCE RATIO FOR INTERACTION/INDEPENDENT DISPERSION TESTS**
+Not getting exactly same value for deviance ratio... could have to do with how data was simulated?
+
+#### Social Adjusted (P3M3 and P3M4)
+
+```{r P3M3 P3M4 disp}
+par(mfrow = c(1, 2))
+P3M3_sim <- simulateResiduals(fittedModel = P3M3, plot = TRUE) #travel interaction
+testDispersion(P3M3_sim)
+P3M4_sim <- simulateResiduals(fittedModel = P3M4, plot = TRUE) #travel independent
+testDispersion(P3M4_sim)
+```
+
+Also got the same P val for this dispersion test but different deviance ratio (again prob because of simulation differences)...
+
+
+---
+
+## Tables and Figures
+
+---
+
+
+
+Pulling glmmTMB model results into tibble then dataframe to manipulate into a table. I unfortunately couldn't just use `{stargazer}` or similiar packages because next-to-nothing is compatible with glmmTMB outputs... which is annoying!
+
+```{r tidy}
+#time alone interaction
+P1M1_tidy <- tidy(P1M1)
+P1M1_df <- as.data.frame(P1M1_tidy)
+
+#time alone independent
+P1M2_tidy <- tidy(P1M2)
+P1M2_df <- as.data.frame(P1M2_tidy)
+
+#time feeding interaction
+P2M1_tidy <- tidy(P2M1)
+P2M1_df <- as.data.frame(P2M1_tidy)
+
+#time feeding independent
+P2M2_tidy <- tidy(P2M2)
+P2M2_df <- as.data.frame(P2M2_tidy)
+
+#time traveling interaction
+P2M3_tidy <- tidy(P2M3)
+P2M3_df <- as.data.frame(P2M3_tidy)
+
+#time traveling independent
+P2M4_tidy <- tidy(P2M4)
+P2M4_df <- as.data.frame(P2M4_tidy)
+
+#time social interaction
+P3M1_tidy <- tidy(P3M1)
+P3M1_df <- as.data.frame(P3M1_tidy)
+
+#time social independent
+P3M2_tidy <- tidy(P3M2)
+P3M2_df <- as.data.frame(P3M2_tidy)
+
+#time social adjusted interaction
+P3M3_tidy <- tidy(P3M3)
+P3M3_df <- as.data.frame(P3M3_tidy)
+
+#time social adjusted independent
+P3M4_tidy <- tidy(P3M4)
+P3M4_df <- as.data.frame(P3M4_tidy)
+
+```
+
+
+```{r table by hand}
+
+#Table 3 - GLMM parameter estimates for independent effects models
+
+alone_independent <- P1M2_df[c(1:4),c(4:8)]
+
+feed_independent <- P2M2_df[c(1:4),c(4:8)]
+
+travel_independent <- P2M4_df[c(1:4),c(4:8)]
+
+social_independent <- P3M2_df[c(1:4),c(4:8)]
+
+social_adj_independent <- P3M4_df[c(1:4),c(4:8)]
+
+
+#Table 4 - GLMM parameter estimates for interaction effect models
+
+alone_interaction <- P1M1_df[c(1,5,6),c(4:8)]
+
+feed_interaction <- P2M1_df[c(1,5,6),c(4:8)]
+
+travel_interaction <- P2M3_df[c(1,5,6),c(4:8)]
+
+social_interaction <- P3M1_df[c(1,5,6),c(4:8)]
+
+social_adj_interaction <- P3M3_df[c(1,5,6),c(4:8)]
+
+```
+
+
+change column names in data frames
+```{r for loop col names}
+
+alone_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+feed_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+travel_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+social_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+social_adj_independent$term <- c("Intercept", "Chimpanzee","Infant age class 1.5 < 3","Infant age class 3 < 4.5")
+
+```
+
+testing out cbind
+
+```{r indep table}
+Independent_Table <- rbind.data.frame(alone_independent,feed_independent,travel_independent,social_independent,social_adj_independent)
+
+
+Independent_Table <- Independent_Table %>% 
+          mutate_if(is.numeric, round, digits = 3)
+
+
+```
+
+spent way too long trying to figure out how to italicize z and P.. decided to just italicize the entire first row
+```{r kbl}
+
+#Table3
+
+kbl(Independent_Table, col.names = c("Model", "Estimate", "Standard error", "z", "P"), caption = "Table 3 - GLMM parameter estimates for independent effects models") %>%
+  kable_paper(html_font = "Cambria") %>%
+  pack_rows(index = c("Time Alone" = 4, "Feeding" = 4, "Travel" = 4, "Social interactions" = 4, "Adjusted social interactions" = 4))%>%
+  add_indent(1:20, level_of_indent = 10)%>%
+  row_spec(0, italic = T)
+  
+```
+
+```{r interaction labs}
+
+alone_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+feed_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+travel_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+social_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+social_adj_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
+
+```
+
+interaction table prep
+```{r interaction table}
+Interaction_Table <- rbind.data.frame(alone_interaction,feed_interaction,travel_interaction,social_interaction,social_adj_interaction)
+
+
+Interaction_Table <- Interaction_Table %>% 
+          mutate_if(is.numeric, round, digits = 3)
+
+rownames(Interaction_Table) <- c(1:15)
+
+
+```
+
+spent way too long trying to figure out how to italicize z and P.. decided to just italicize the entire first row
+```{r interact kbl}
+#Table 4
+
+kbl(Interaction_Table, col.names = c("Model", "Estimate", "Standard error", "z", "P"), caption = "Table 4 - GLMM parameter estimates for interaction effects models") %>%
+  kable_paper(html_font = "Cambria") %>%
+  pack_rows(index = c("Time Alone" = 3, "Feeding" = 3, "Travel" = 3, "Social interactions" = 3, "Adjusted social interactions" = 3))%>%
+  add_indent(1:15, level_of_indent = 10)%>%
+  row_spec(0, italic = T)
+  
+  
+```
+
+
+---
+
+#Figures
+
+---
+
+
+
+
+
+I first built a theme with the approximate fonts/sizes/format used in Lee et al. (2021), though I did add colors!
+```{r fig theme}
+leetheme <- theme(plot.title = element_text(family = "Times", "bold", size = 12, hjust = 0.5), 
+                  legend.title = element_blank(),
+                  legend.text = element_text(family = "Times", size = (10)), 
+                  axis.title = element_text(family = "Times", size = (12)),
+                  axis.text = element_text(family = "Times", size = (12)))
+```
+
+
+I used the `for` loops below to add new columns with proportions of each behavior for figure-making
+```{r fig prep}
+#prep for fig1
+time_alone$pct <- NULL 
+  for (i in 1:nrow(time_alone)) {
+    time_alone$pct[i] <- time_alone$alone[i]/time_alone$total[i]
+  } 
+
+#prep for fig2
+feed_travel_social$feedpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$feedpct[i] <- feed_travel_social$feed[i]/feed_travel_social$total[i]
+  }
+
+#prep for fig3
+feed_travel_social$travelpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$travelpct[i] <- feed_travel_social$travel[i]/feed_travel_social$total[i]
+  }
+
+#prep for fig4
+feed_travel_social$socialpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$socialpct[i] <- feed_travel_social$social[i]/feed_travel_social$total[i]
+  }
+
+#prep for fig5
+feed_travel_social$adjustpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$adjustpct[i] <- feed_travel_social$social_adj[i]/feed_travel_social$social[i]
+  }
+
+```
+
+
+I used the `summarise` function to create new dataframes with the summarized values for the different behaviors. I grouped the frames by species and age to make it easier to plot. 
+```{r summaries}
+
+#Data for figure 1
+alone.data <- time_alone %>%
+  group_by(species, age) %>%
+  summarise(AvgPct = mean(pct), sd = sd(pct), n = n(), se = sd/sqrt(n))
+
+#Data for figures 2-5
+behav.data <- feed_travel_social%>%
+  group_by(species, age) %>%
+  summarise(AvgPct.Feed = mean(feedpct), feed.sd = sd(feedpct), feed.n = n(), feed.se = feed.sd/sqrt(feed.n), AvgPct.Travel = mean(travelpct), travel.sd = sd(travelpct), travel.n = n(), travel.se = travel.sd/sqrt(travel.n), AvgPct.Social = mean(socialpct), social.sd = sd(socialpct), social.n = n(), social.se = social.sd/sqrt(social.n), AvgPct.Adjust = mean(adjustpct), adjust.sd = sd(adjustpct), adjust.n = n(), adjust.se = adjust.sd/sqrt(adjust.n))
+  
+```
+
+Figure 1 - Mean ± standard error percentage of time that lactating females spent ranging in parties with only their immature offspring.
+
+```{r fig 1}
+
+fig1 <- ggplot(alone.data, aes(age, AvgPct)) + theme_classic() + leetheme + ggtitle("Time Alone")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,.5))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct-se, ymax = AvgPct+se, group = species),width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig1
+```
+
+Figure 2 - Mean ± standard error percentage of time that lactating females spent feeding.
+```{r fig 2}
+
+fig2 <- ggplot(behav.data, aes(age, AvgPct.Feed)) + theme_classic() + leetheme + ggtitle("Feeding")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Feed-feed.se, ymax = AvgPct.Feed+feed.se, group = species),width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig2
+```
+
+Figure 3 - Mean ± standard error percentage of time that lactating females spent traveling.
+```{r fig 3}
+
+fig3 <- ggplot(behav.data, aes(age, AvgPct.Travel)) + theme_classic() + leetheme + ggtitle("Travel")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,.5))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Travel-travel.se, ymax = AvgPct.Travel+travel.se, group = species), width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig3
+```
+
+Figure 4 - Mean ± standard error percentage of time that lactating females spent engaged in social interactions with any community member.
+
+```{r fig 4}
+
+fig4 <- ggplot(behav.data, aes(age, AvgPct.Social)) + theme_classic() + leetheme + ggtitle("Social Interactions")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,.5))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Social-social.se, ymax = AvgPct.Social+social.se, group = species), width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig4
+```
+
+Figure 5 - Mean ± standard error percentage of social interactions in which lactating females spent engaged in social interactions with individuals other than their immature offspring.
+
+```{r fig 5}
+
+fig5 <- ggplot(behav.data, aes(age, AvgPct.Adjust)) + theme_classic() + leetheme + ggtitle("Adjusted Social Interactions")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of social interactions\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Adjust-adjust.se, ymax = AvgPct.Adjust+adjust.se, group = species),width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig5
+```
+
+
+
