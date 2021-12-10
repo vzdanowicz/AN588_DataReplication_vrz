@@ -18,7 +18,7 @@ knitr::opts_chunk$set(echo = TRUE,knitr.table.format = 'markdown')
 *You do not need to replicate ALL of the analyses presented in the paper, but at minimum you must replicate at least 3 analyses, including at least one descriptive statistical analysis and one inferential statistical analysis. As part of this assignment, you must also replicate to the best of your abilities at least one figure.*
 
 
-```{r - packages, messages = FALSE}
+```{r packages, include = FALSE}
 library(curl)
 library(dplyr)
 library(broom)
@@ -73,9 +73,7 @@ GLMM analysis revealed that in support of the first two predictions, lactating c
 
 I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees" by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me. 
 
-I then decided to look back over the other articles I had considered earlier for the assignment. This article (Lee et al. 2021) covered a somewhat similar topic  while including much more detailed descriptions of their analyses! Though they explained their parameters/analyses fairly well, I still ran into some fun challenges because the authors fit GLMM using `{glmmTMB}`, which there is frustratingly little information on! Even after all the time I spent learning about glmms and reading about `glmmTMB`, I still don't quite understand why they used `glmmTMB` and not `glmer` or a more popular glmm function/package. It seems that `glmmTMB` is preferred when working with *zero-inflated* models but this analysis did not use such models? Regardless, once I figured out how to run the first GLMM using `glmmTMB`, the rest of the analyses were fairly easy. I ended up replicating the two main tables from the article (Tables 2, and Tables 3)
-
-<img src= "AN588_DataReplication_vrz/img/Fig1.png"/>
+I then decided to look back over the other articles I had considered earlier for the assignment. This article (Lee et al. 2021) covered a somewhat similar topic  while including much more detailed descriptions of their analyses! Though they explained their parameters/analyses fairly well, I still ran into some fun challenges because the authors fit GLMM using `{glmmTMB}`, which there is frustratingly little information on! Even after all the time I spent learning about glmms and reading about `glmmTMB`, I still don't quite understand why they used `glmmTMB` and not `glmer` or a more popular glmm function/package. It seems that `glmmTMB` is preferred when working with *zero-inflated* models but this analysis did not use such models? Regardless, once I figured out how to run the first GLMM using `glmmTMB`, the rest of the analyses were fairly easy. I ended up replicating the two main tables from the article (Tables 2, and Tables 3) after fitting/running multiple `glmmTMB` models, as well as all 5 figures from the raw data. I have inserted images of the figures/tables from Lee et al. (2021) following my own replication of each in order to compare.
 
 ---
 
@@ -161,9 +159,13 @@ I first tested the interaction between species and infant age class (as outlined
 
 I then realized `Anova()` function from `{car}` can actually directly test interactions within a single model. So I paired down to just have P1_interaction model and then tested the signifiance of the interaction using `Anova()` Wald "Chisq" with type "III".
 
-### P1 - Interaction (M1)
+---
 
-#testing species/age interaction
+### Time Alone Interaction (P1M1)
+
+---
+
+>testing species/age interaction
 
 `P1_interaction <- glmmTMB(prop_alone ~ as.factor(species) : as.factor(age_bin) + (1 | id), data = time_alone, family = betabinomial)`
 `Anova(P1_interaction, type = c("III"), test.statistic = "Chisq")`
@@ -197,8 +199,11 @@ P1M1_df <- P1M1_results$df[4]
 P1M1_p <- P1M1_results$p.value[4]
 ```
 
+---
 
-### P1 - Independent (M2)
+### Time Alone Independent (P1M2)
+
+---
 
 Interaction was **not** significant so we need to model them as independent fixed effects.. *now testing independent effects so use type II anova instead of 3*
 
@@ -233,7 +238,11 @@ P1M2_AGE_p <- P1M2_results$p.value[2]
 
 not 100% sure how yet to pull out variables from the model or anova.. need to assess what I need to create the table (tables 3/4 in the paper)
 
-### P1 - Dispersion Tests
+---
+
+### P1: Dispersion Tests
+
+---
 
 'We reported results of nonparametric dispersion
 tests for all models using the testDispersion function (case
@@ -286,8 +295,11 @@ in feeding or travel, respectively, during each infant age class by
 the total number of good observations collected on that lactating
 female during that infant age class'
 
-### Feeding Model (P2M1)
+---
 
+### Feeding Interaction (P2M1)
+
+---
 
 
 first changed character values to factor since this is a diff file
@@ -322,7 +334,11 @@ P2M1_p <- P2M1_results$p.value[4]
 ```
 
 
-### Feeding Model (P2M2)
+---
+
+### Feeding Independent (P2M2)
+
+---
 
 **now looking at species and age as independent fixed effects**
 
@@ -355,7 +371,11 @@ P2M2_AGE_p <- P2M2_results$p.value[2]
 ```
 
 
-###Traveling Model (P2M3)
+---
+
+### Travel Interaction (P2M3)
+
+---
 
 Interact model first
 
@@ -382,7 +402,11 @@ P2M3_p <- P2M3_results$p.value[4]
 ```
 
 
-###Traveling Model (P2M4)
+---
+
+### Travel Independent (P2M4)
+
+---
 
 **now looking at species and age as independent fixed effects**
 
@@ -472,7 +496,11 @@ during each infant age class by the total number of social
 interaction point samples collected on that lactating female
 during that infant age class.'
 
+---
+
 ### Social Interaction (P3M1)
+
+---
 
 first test interaction of species and age when looking at social behav
 ```{r P3M1}
@@ -496,8 +524,11 @@ P3M1_df <- P3M1_results$df[4]
 P3M1_p <- P3M1_results$p.value[4]
 ```
 
+---
 
 ### Social Independent (P3M2)
+
+---
 
 **now looking at species and age as independent fixed effects**
 
@@ -530,7 +561,11 @@ P3M2_AGE_df <- P3M2_results$df[2]
 P3M2_AGE_p <- P3M2_results$p.value[2]
 ```
 
+---
+
 ### Social Adjusted Interaction (P3M3)
+
+---
 
 first test interaction of species and age when looking at social behav
 ```{r P3M3}
@@ -554,8 +589,11 @@ P3M3_df <- P3M3_results$df[4]
 P3M3_p <- P3M3_results$p.value[4]
 ```
 
+---
 
 ### Social Adjusted Independent (P3M4)
+
+---
 
 **now looking at species and age as independent fixed effects**
 
@@ -625,7 +663,7 @@ Also got the same P val for this dispersion test but different deviance ratio (a
 
 ---
 
-## Tables and Figures
+## Table Replication
 
 ---
 
@@ -743,6 +781,13 @@ kbl(Independent_Table, col.names = c("Model", "Estimate", "Standard error", "z",
   
 ```
 
+Table 3 - screenshot captured from Lee et al. (2021)
+
+```{r article table3, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("img/Table3.png", error = FALSE)
+```
+
+
 ```{r interaction labs}
 
 alone_interaction$term <- c("Intercept","Chimpanzee × Age 1.5 < 3", "Chimpanzee × Age 3 < 4.5")
@@ -780,13 +825,18 @@ kbl(Interaction_Table, col.names = c("Model", "Estimate", "Standard error", "z",
 ```
 
 
+Table 4 - screenshot captured from Lee et al. (2021)
+
+```{r article table4, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("img/Table4.png", error = FALSE)
+```
+
+
 ---
 
-#Figures
+## Figure Replication
 
 ---
-
-
 
 
 
@@ -836,7 +886,7 @@ feed_travel_social$adjustpct <- NULL
 
 
 I used the `summarise` function to create new dataframes with the summarized values for the different behaviors. I grouped the frames by species and age to make it easier to plot. 
-```{r summaries}
+```{r summaries, message = FALSE}
 
 #Data for figure 1
 alone.data <- time_alone %>%
