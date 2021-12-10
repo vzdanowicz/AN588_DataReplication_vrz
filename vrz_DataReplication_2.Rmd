@@ -13,17 +13,12 @@ output:
 knitr::opts_chunk$set(echo = TRUE,knitr.table.format = 'markdown')
 ```
 
-# Assignment Overview
+>Assignment Overview
 
-You do not need to replicate ALL of the analyses presented in the paper, but at minimum you must replicate at least 3 analyses, including at least one descriptive statistical analysis and one inferential statistical analysis. As part of this assignment, you must also replicate to the best of your abilities at least one figure.
+*You do not need to replicate ALL of the analyses presented in the paper, but at minimum you must replicate at least 3 analyses, including at least one descriptive statistical analysis and one inferential statistical analysis. As part of this assignment, you must also replicate to the best of your abilities at least one figure.*
 
 
-
-Stargazer package -> good tables, publication ready
-kable -> knit into HTML
-DT -> allows you to navigate table in RMarkdown
-
-```{r - packages}
+```{r - packages, messages = FALSE}
 library(curl)
 library(dplyr)
 library(broom)
@@ -39,7 +34,9 @@ library(kableExtra)
 library(tibble)
 ```
 
-I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees"  by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present about his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me!! I then decided to look back over the other articles I had been considering for the assignment and realized the Lee et al. (2021) paper titled, "Gregariousness, foraging effort, and affiliative interactions in lactating bonobos and chimpanzees" covered a somewhat similar topic as the Surbeck paper while including much more detailed descriptions of their analyses! 
+I first selected an article titled, "Attractiveness of female sexual signaling predicts  differences in female grouping patterns between bonobos and chimpanzees"  by Surbeck et al. (2021) to replicate for this assignment. I found the study and their results extremely interesting, especially since I recently heard Surbeck present about his research at NEEP and have long heard the idea that bonobos are more gregarious than chimps because of ecological differences. However, as I read through the paper and began to try and manipulate the dataset they shared on Dryad, I realized I was missing a lot of the details necessary to run the models they did in their analyses. The results and methodology sections at the end of the paper fail to include the parameters of their GLMMs, making it nearly impossible for me to try and understand and replicate - especially because this kind of modeling is brand new to me!! 
+
+I then decided to look back over the other articles I had been considering for the assignment and realized the Lee et al. (2021) paper titled, "Gregariousness, foraging effort, and affiliative interactions in lactating bonobos and chimpanzees" covered a somewhat similar topic as the Surbeck paper while including much more detailed descriptions of their analyses! But I still ran into some fun challenges because the authors fit GLMM using `{glmmTMB}`, which there is frustratingly little information on! Even after all the time I spent learning about glmms and reading about `glmmTMB`, I still don't quite understand why they used `glmmTMB` and not `glmer` or a more popular glmm function/package. It seems that `glmmTMB` is preferred when working with *zero-inflated* models but this analysis did not use such models? Regardless - I figured it out!
 
 
 ---
@@ -743,5 +740,180 @@ kbl(Interaction_Table, col.names = c("Model", "Estimate", "Standard error", "z",
   
   
 ```
+
+
+---
+
+#Figures
+
+---
+
+
+
+
+
+I first built a theme with the approximate fonts/sizes/format used in Lee et al. (2021), though I did add colors!
+```{r fig theme}
+leetheme <- theme(plot.title = element_text(family = "Times", "bold", size = 12, hjust = 0.5), 
+                  legend.title = element_blank(),
+                  legend.text = element_text(family = "Times", size = (10)), 
+                  axis.title = element_text(family = "Times", size = (12)),
+                  axis.text = element_text(family = "Times", size = (12)))
+```
+
+
+I used the `for` loops below to add new columns with proportions of each behavior for figure-making
+```{r fig prep}
+#prep for fig1
+time_alone$pct <- NULL 
+  for (i in 1:nrow(time_alone)) {
+    time_alone$pct[i] <- time_alone$alone[i]/time_alone$total[i]
+  } 
+
+#prep for fig2
+feed_travel_social$feedpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$feedpct[i] <- feed_travel_social$feed[i]/feed_travel_social$total[i]
+  }
+
+#prep for fig3
+feed_travel_social$travelpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$travelpct[i] <- feed_travel_social$travel[i]/feed_travel_social$total[i]
+  }
+
+#prep for fig4
+feed_travel_social$socialpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$socialpct[i] <- feed_travel_social$social[i]/feed_travel_social$total[i]
+  }
+
+#prep for fig5
+feed_travel_social$adjustpct <- NULL
+  for (i in 1:nrow(feed_travel_social)) {
+    feed_travel_social$adjustpct[i] <- feed_travel_social$social_adj[i]/feed_travel_social$social[i]
+  }
+
+```
+
+
+I used the `summarise` function to create new dataframes with the summarized values for the different behaviors. I grouped the frames by species and age to make it easier to plot. 
+```{r summaries}
+
+#Data for figure 1
+alone.data <- time_alone %>%
+  group_by(species, age) %>%
+  summarise(AvgPct = mean(pct), sd = sd(pct), n = n(), se = sd/sqrt(n))
+
+#Data for figures 2-5
+behav.data <- feed_travel_social%>%
+  group_by(species, age) %>%
+  summarise(AvgPct.Feed = mean(feedpct), feed.sd = sd(feedpct), feed.n = n(), feed.se = feed.sd/sqrt(feed.n), AvgPct.Travel = mean(travelpct), travel.sd = sd(travelpct), travel.n = n(), travel.se = travel.sd/sqrt(travel.n), AvgPct.Social = mean(socialpct), social.sd = sd(socialpct), social.n = n(), social.se = social.sd/sqrt(social.n), AvgPct.Adjust = mean(adjustpct), adjust.sd = sd(adjustpct), adjust.n = n(), adjust.se = adjust.sd/sqrt(adjust.n))
+  
+```
+
+Figure 1 - Mean ± standard error percentage of time that lactating females spent ranging in parties with only their immature offspring.
+
+```{r fig 1}
+
+fig1 <- ggplot(fig1.data, aes(age, AvgPct)) + theme_classic() + leetheme + ggtitle("Time Alone")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,.5))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct-se, ymax = AvgPct+se, group = species),width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig1
+```
+
+Figure 2 - Mean ± standard error percentage of time that lactating females spent feeding.
+```{r fig 2}
+
+fig2 <- ggplot(behav.data, aes(age, AvgPct.Feed)) + theme_classic() + leetheme + ggtitle("Feeding")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Feed-feed.se, ymax = AvgPct.Feed+feed.se, group = species),width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig2
+```
+
+Figure 3 - Mean ± standard error percentage of time that lactating females spent traveling.
+```{r fig 3}
+
+fig3 <- ggplot(behav.data, aes(age, AvgPct.Travel)) + theme_classic() + leetheme + ggtitle("Travel")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,.5))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Travel-travel.se, ymax = AvgPct.Travel+travel.se, group = species), width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig3
+```
+
+Figure 4 - Mean ± standard error percentage of time that lactating females spent engaged in social interactions with any community member.
+
+```{r fig 4}
+
+fig4 <- ggplot(behav.data, aes(age, AvgPct.Social)) + theme_classic() + leetheme + ggtitle("Social Interactions")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,.5))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of focal observation time\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Social-social.se, ymax = AvgPct.Social+social.se, group = species), width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig4
+```
+
+Figure 5 - Mean ± standard error percentage of social interactions in which lactating females spent engaged in social interactions with individuals other than their immature offspring.
+
+```{r fig 5}
+
+fig5 <- ggplot(behav.data, aes(age, AvgPct.Adjust)) + theme_classic() + leetheme + ggtitle("Adjusted Social Interactions")+
+        
+        geom_bar(aes(fill = species), stat = "identity", position = position_dodge(0.8), width = 0.9)+
+  
+        scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1))+
+  
+        scale_x_discrete(labels = c("0 < 1.5", "1.5 < 3", "3 < 4.5"))+
+  
+        xlab("\nAge of youngest infant (years)") + ylab("Percent of social interactions\n")+
+  
+        geom_errorbar(aes(ymin = AvgPct.Adjust-adjust.se, ymax = AvgPct.Adjust+adjust.se, group = species),width = 0.1, position = position_dodge(0.8))+
+  
+        scale_fill_manual(values = c("darkseagreen4", "darkseagreen3"))
+  
+fig5
+```
+
 
 
